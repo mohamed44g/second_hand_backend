@@ -1,9 +1,3 @@
--- إنشاء جدول Categories
-CREATE TABLE Categories (
-    category_id SERIAL PRIMARY KEY,
-    category_name VARCHAR(100) NOT NULL
-);
-
 -- إنشاء جدول Users
 CREATE TABLE Users (
     user_id SERIAL PRIMARY KEY,
