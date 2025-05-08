@@ -7,6 +7,7 @@ import {
   getBidByIdDb,
   cancelBid,
   finalizeAuction,
+  cancelBidSellerDb,
 } from "../models/bids.model.js";
 import { Sendresponse } from "../utils/response.js";
 import AppError from "../utils/AppError.js";
@@ -46,10 +47,13 @@ export const getBidHistoryById = AsyncWrapper(async (req, res, next) => {
 });
 
 export const addBid = AsyncWrapper(async (req, res, next) => {
-  const { device_id, minimum_increment, auction_end_time } = req.body;
+  const {
+    device_id,
+    minimum_increment,
+    auction_end_time,
+    minimumNonCancellablePrice,
+  } = req.body;
   const user_id = req.user.userId;
-
-  console.log(req.body);
 
   if (!device_id || !minimum_increment || !auction_end_time) {
     return next(
@@ -61,19 +65,15 @@ export const addBid = AsyncWrapper(async (req, res, next) => {
   }
 
   if (minimum_increment <= 0) {
-    return next(
-      new AppError(
-        "Minimum increment must be greater than 0",
-        400
-      )
-    );
+    return next(new AppError("Minimum increment must be greater than 0", 400));
   }
 
   const newBid = await createBid(
     device_id,
     user_id,
     minimum_increment,
-    auction_end_time
+    auction_end_time,
+    minimumNonCancellablePrice
   );
 
   Sendresponse(res, 201, "Bid added successfully", newBid);
@@ -120,5 +120,16 @@ export const finalizeAuctionController = AsyncWrapper(
     const result = await finalizeAuction(bid_id);
 
     Sendresponse(res, 200, "Auction finalized successfully", result);
+  }
+);
+
+export const cancelBidSellerController = AsyncWrapper(
+  async (req, res, next) => {
+    const { bid_id } = req.params;
+    if (!bid_id) {
+      return next(new AppError("Please provide bid_id", 400));
+    }
+    const result = await cancelBidSellerDb(bid_id);
+    Sendresponse(res, 200, "Bid canceled successfully", result);
   }
 );

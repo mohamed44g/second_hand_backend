@@ -54,6 +54,22 @@ export const logWalletTransaction = async (
   return result.rows[0];
 };
 
+export const logWalletUsingClientTransaction = async (
+  client,
+  user_id,
+  amount,
+  transaction_type,
+  description = null
+) => {
+  const result = await client.query(
+    `INSERT INTO wallet_history (user_id, amount, transaction_type, description)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
+    [user_id, amount, transaction_type, description]
+  );
+  return result.rows[0];
+};
+
 // دالة لجلب سجل العمليات لمستخدم معين
 export const getWalletHistoryDb = async (user_id) => {
   const result = await pool.query(
@@ -61,4 +77,17 @@ export const getWalletHistoryDb = async (user_id) => {
     [user_id]
   );
   return result.rows;
+};
+
+// دالة لتحديث لاضافة رصيد معلق للبائع او المشترى
+
+export const updatePendingBalanceDb = async (client, user_id, amount) => {
+  const result = await client.query(
+    `UPDATE Users SET pending_balance = pending_balance + $1 WHERE user_id = $2 RETURNING *`,
+    [amount, user_id]
+  );
+  if (result.rows.length === 0) {
+    throw new AppError("User not found", 404);
+  }
+  return result.rows[0];
 };

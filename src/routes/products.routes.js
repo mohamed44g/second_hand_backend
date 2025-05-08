@@ -15,11 +15,9 @@ import {
   getLatestDevices,
 } from "../controllers/products.controller.js";
 import { auth } from "../middlewares/auth.middleware.js";
+import upload from "../config/uploadConfig.js";
 
 const router = express.Router();
-
-const storage = multer.memoryStorage();
-const upload = multer({ storage });
 
 router.get("/category", getCategories);
 router.post("/addMainCategory", addMainCategory);
@@ -27,7 +25,7 @@ router.post("/addSubCategory", addSubCategory);
 
 //products
 router.get("/", getDevices);
-router.post("/", auth, upload.single("file"), addDevice);
+router.post("/", auth, upload.array("file", 20), addDevice);
 router.get("/latest", getLatestDevices);
 router.get("/search", getDevicesBySearch);
 router.get("/category", getCategories);

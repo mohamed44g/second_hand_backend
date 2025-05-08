@@ -30,11 +30,11 @@ export const addDevice = AsyncWrapper(async (req, res, next) => {
     is_auction,
   } = req.body;
 
-  let image_url = null;
   const seller_id = req.user.userId;
 
-  if (req.file) {
-    image_url = await uploadImage(req.file);
+
+  if (!req.files) {
+    next(new AppError("No images uploaded", 400));
   }
 
   const newDevice = await createDevice(
@@ -45,16 +45,14 @@ export const addDevice = AsyncWrapper(async (req, res, next) => {
     starting_price,
     current_price,
     seller_id,
-    image_url,
     condition,
     manufacturing_year,
     accessories,
-    is_auction
+    is_auction,
+    req.files
   );
 
-  Sendresponse(res, 201, "Device added successfully", {
-    device: newDevice,
-  });
+  Sendresponse(res, 201, "Device added successfully", newDevice);
 });
 
 export const getDevices = AsyncWrapper(async (req, res, next) => {

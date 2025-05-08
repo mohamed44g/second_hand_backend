@@ -9,6 +9,9 @@ import {
   userCheck,
   userCreate,
   userDelete,
+  getUserByIdDb,
+  updateUserDb,
+  changeUserPasswordDb,
 } from "../models/users.model.js";
 import AppError from "../utils/AppError.js";
 import { getDevicesBySellerIdDb } from "../models/products.model.js";
@@ -27,16 +30,24 @@ export const register = AsyncWrapper(async (req, res, next) => {
     last_name,
     phone_number,
     address,
-    identity_image,
     is_seller,
     verificationCode,
   } = req.body;
 
+  let identity_image = null;
+
+  if (req.file) {
+    identity_image = `uploads/${req.file?.filename}`.replace(/\\/g, "/");
+  }
+
   //التحقق من وجود المستخدم
   const check = await userCheck(username, email);
 
+  if (check) {
+    return next(new AppError("User already exists", 400));
+  }
+
   const sessionCode = req.session.verificationCode;
-  console.log(sessionCode, "ver", verificationCode);
 
   if (!sessionCode || sessionCode.email !== email) {
     next(new AppError("Invalid verification code", 400));
@@ -89,13 +100,13 @@ export const sendVerificationCode = AsyncWrapper(async (req, res) => {
 
   // إرسال الكود عبر الإيميل
   const mailOptions = {
-    from: "Second Hand <mohammedbadry456@gmail.com>",
+    from: "Second Hand <secondhand5471@gmail.com>",
     to: email,
     subject: "كود التحقق - Second Hand",
     html: `
       <h2>مرحبًا!</h2>
       <p>كود التحقق الخاص بك هو: <strong>${verificationCode}</strong></p>
-      <p>الكود صالح لمدة 10 دقائق فقط.</p>
+      <p>الكود صالح لمدة ساعة واحدة فقط.</p>
       <p>إذا لم تطلب هذا الكود، يرجى تجاهل هذا الإيميل.</p>
     `,
   };
@@ -141,6 +152,37 @@ export const login = AsyncWrapper(async (req, res, next) => {
   });
 });
 
+export const getUserById = AsyncWrapper(async (req, res, next) => {
+  const { userId } = req.user;
+  const user = await getUserByIdDb(userId);
+  if (!user) {
+    return next(new AppError("User not found", 404));
+  }
+  Sendresponse(res, 200, "User retrieved successfully", user);
+});
+
+export const updateUser = AsyncWrapper(async (req, res, next) => {
+  const { userId } = req.user;
+  const { username, email, first_name, last_name, phone_number, address } =
+    req.body;
+
+  const user = await updateUserDb(
+    userId,
+    username,
+    email,
+    first_name,
+    last_name,
+    phone_number,
+    address
+  );
+
+  if (!user) {
+    return next(new AppError("User not found", 404));
+  }
+
+  Sendresponse(res, 200, "User updated successfully", user);
+});
+
 export const deleteUser = AsyncWrapper(async (req, res, next) => {
   const { userId } = req.user;
   const user = await userDelete(userId);
@@ -148,6 +190,26 @@ export const deleteUser = AsyncWrapper(async (req, res, next) => {
     return next(new AppError("User not found", 404));
   }
   Sendresponse(res, 200, "User deleted successfully");
+});
+
+export const changeUserPassword = AsyncWrapper(async (req, res, next) => {
+  const { userId } = req.user;
+  const { currentPassword, newPassword } = req.body;
+  const user = await getUserByIdDb(userId);
+  if (!user) {
+    return next(new AppError("User not found", 404));
+  }
+  // Compare the current password with the stored password
+  const passwordMatch = await bcrypt.compare(currentPassword, user.password);
+  if (!passwordMatch) {
+    return next(new AppError("Invalid current password", 400));
+  }
+  // Hash the new password
+  const saltRounds = 10;
+  const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+  // Update the user's password
+  await changeUserPasswordDb(userId, hashedPassword);
+  Sendresponse(res, 200, "Password changed successfully");
 });
 
 export const getSellerProducts = AsyncWrapper(async (req, res, next) => {
