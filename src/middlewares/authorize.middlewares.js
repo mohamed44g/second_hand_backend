@@ -9,7 +9,7 @@ export const authorizeRoles = (...roles) => {
     }
 
     if (!roles.includes(user.role)) {
-      throw new AppError("الوصول ممنوع", 403);
+      throw new AppError("غير مسموح لا يوجد صلاحية لهذا المستخدم", 403);
     }
 
     next();

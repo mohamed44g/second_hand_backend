@@ -34,7 +34,7 @@ export const userCreate = async (
       last_name,
       phone_number || null,
       address || null,
-      identity_image || null,
+      identity_image,
       is_seller || false,
     ]
   );
@@ -47,6 +47,38 @@ export const userDelete = async (user_id) => {
     user_id,
   ]);
   return user.rowCount;
+};
+
+export const updateUserDb = async (
+  user_id,
+  username,
+  email,
+  first_name,
+  last_name,
+  phone_number,
+  address
+) => {
+  const user = await pool.query(
+    `UPDATE Users SET username = $1, email = $2, first_name = $3, last_name = $4, phone_number = $5, address = $6 WHERE user_id = $7 RETURNING *`,
+    [username, email, first_name, last_name, phone_number, address, user_id]
+  );
+  return user.rows[0];
+};
+
+export const changeUserPasswordDb = async (user_id, password) => {
+  const user = await pool.query(
+    `UPDATE Users SET password = $1 WHERE user_id = $2 RETURNING *`,
+    [password, user_id]
+  );
+  return user.rowCount;
+};
+
+export const getUserByIdDb = async (user_id) => {
+  const user = await pool.query(
+    "SELECT username, password, first_name, last_name, phone_number, address, identity_image, is_seller, is_admin, created_at, status, email FROM Users WHERE user_id = $1",
+    [user_id]
+  );
+  return user.rows[0];
 };
 
 // جلب كل التجار للادمن

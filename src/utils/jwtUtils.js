@@ -1,19 +1,15 @@
 import jwt from "jsonwebtoken";
 
-export const generateAccessToken = (userId, email, is_seller) => {
-  return jwt.sign({ userId, email, is_seller }, process.env.JWT_ACCESS_SECRET, {
+export const generateAccessToken = (userId, email, role) => {
+  return jwt.sign({ userId, email, role }, process.env.JWT_ACCESS_SECRET, {
     expiresIn: process.env.JWT_ACCESS_EXPIRATION,
   });
 };
 
-export const generateRefreshToken = (userId, email, is_seller) => {
-  return jwt.sign(
-    { userId, email, is_seller },
-    process.env.JWT_REFRESH_SECRET,
-    {
-      expiresIn: process.env.JWT_REFRESH_EXPIRATION,
-    }
-  );
+export const generateRefreshToken = (userId, email, role) => {
+  return jwt.sign({ userId, email, role }, process.env.JWT_REFRESH_SECRET, {
+    expiresIn: process.env.JWT_REFRESH_EXPIRATION,
+  });
 };
 
 export const verifyAccessToken = (token) => {

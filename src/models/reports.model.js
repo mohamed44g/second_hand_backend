@@ -36,8 +36,9 @@ export const getUserReportstDb = async (reporter_id) => {
 // جلب كل البلاغات (للإدارة)
 export const getAllReportstDb = async () => {
   const result = await pool.query(
-    `SELECT r.*, u.username AS reporter_name 
+    `SELECT r.*, u.username AS reporter_name, c.chat_id
      FROM Reports r
+     LEFT JOIN Messages c ON r.reported_entity_id = c.message_id AND r.reported_entity_type = 'message'
      JOIN Users u ON r.reporter_id = u.user_id
      ORDER BY r.created_at DESC`
   );

@@ -9,6 +9,7 @@ import { pool } from "./config/db.js";
 const PORT = process.env.PORT || 5000;
 import { createWriteStream } from "fs";
 import { dirname, join } from "path";
+import path from "path";
 import { fileURLToPath } from "url";
 import session from "express-session";
 //routes
@@ -24,11 +25,13 @@ import sponsoredAdsRoutes from "./routes/sponsoredAds.routes.js";
 import reportsRouter from "./routes/report.routes.js";
 import adminRouter from "./routes/admin.routes.js";
 
-import AppError from "./utils/AppError.js";
-import AsyncWrapper from "./middlewares/errorWrapper.middleware.js";
-
 const app = express();
 const httpServer = createServer(app);
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+app.use("/api/v1/uploads", express.static(join(__dirname, "Uploads")));
 
 const io = new Server(httpServer, {
   cors: {
@@ -76,9 +79,6 @@ app.use((req, res, next) => {
   req.io = io;
   next();
 });
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 app.use(
   cors({

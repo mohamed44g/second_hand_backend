@@ -42,12 +42,7 @@ export const createSponsoredAdDb = async (
       `INSERT INTO wallet_history (user_id, amount, transaction_type, description)
            VALUES ($1, $2, $3, $4)
            RETURNING *`,
-      [
-        user_id,
-        amount,
-        `withdraw`,
-        `Sponsored ad payment for ${ad_entity_type} ID: ${ad_entity_id}`,
-      ]
+      [user_id, amount, `withdraw`, `دفع اعلان على منتج رقم ${ad_entity_id}`]
     );
 
     // إضافة الإعلان الممول
@@ -78,11 +73,11 @@ export const createSponsoredAdDb = async (
     );
 
     await client.query("COMMIT");
-    client.release();
     return sponsoredAd;
   } catch (error) {
-    client.release();
     throw new AppError(error, 500);
+  } finally {
+    client.release();
   }
 };
 

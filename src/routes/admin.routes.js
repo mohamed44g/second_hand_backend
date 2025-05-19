@@ -15,25 +15,41 @@ import {
   getSellers,
   removeSeller,
 } from "../controllers/user.controller.js";
+import { authorizeRoles } from "../middlewares/authorize.middlewares.js";
 
 const router = express.Router();
 
 // جلب كل المستخدمين
-router.get("/users", auth, getUsers);
+router.get("/users", auth, authorizeRoles("admin"), getUsers);
 // تحديث دور المستخدم
-router.patch("/users/:user_id", auth, setUserRole);
+router.patch("/users/:user_id", auth, authorizeRoles("admin"), setUserRole);
 
 // الطلبات
-router.get("/orders", auth, getAllOrders);
-router.patch("/orders/:order_id", auth, updateOrderStatus); // للإدارة فقط (ممكن تضيف middleware للتحقق من الصلاحيات)
+router.get("/orders", auth, authorizeRoles("admin"), getAllOrders);
+router.patch(
+  "/orders/:order_id",
+  auth,
+  authorizeRoles("admin"),
+  updateOrderStatus
+); // للإدارة فقط (ممكن تضيف middleware للتحقق من الصلاحيات)
 
 // التجار
-router.get("/sellers", auth, getSellers);
-router.delete("/sellers/:user_id", auth, removeSeller);
-router.patch("/sellers/:user_id/enable", auth, enableSeller);
-router.patch("/sellers/:user_id/disable", auth, disableSeller);
+router.get("/sellers", auth, authorizeRoles("admin"), getSellers);
+router.delete("/sellers/:user_id", auth, authorizeRoles("admin"), removeSeller);
+router.patch(
+  "/sellers/:user_id/enable",
+  auth,
+  authorizeRoles("admin"),
+  enableSeller
+);
+router.patch(
+  "/sellers/:user_id/disable",
+  auth,
+  authorizeRoles("admin"),
+  disableSeller
+);
 
 // الاحصائيات
-router.get("/statistics", getStats);
+router.get("/statistics", auth, authorizeRoles("admin"), getStats);
 
 export default router;

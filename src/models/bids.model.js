@@ -1,30 +1,92 @@
 // models/bids.model.js
 import { pool } from "../config/db.js";
 import AppError from "../utils/AppError.js";
+import { logWalletUsingClientTransaction } from "./wallet.model.js";
 
 export const getAllBids = async () => {
   const result = await pool.query(
-    `SELECT b.*, u.username AS bidder_username, d.*
+    `SELECT b.*, m.main_category_name,u.username AS seller_username,
+        u.address As seller_address, d.*,
+      CASE 
+         WHEN sa.ad_id IS NOT NULL THEN TRUE 
+         ELSE FALSE 
+       END AS is_Sponsored, 
+              (SELECT image_path 
+        FROM DeviceImages di 
+        WHERE di.device_id = d.device_id 
+        ORDER BY di.created_at ASC 
+        LIMIT 1) AS image_url,
+       sa.end_date AS ad_end_date
          FROM bids b
          JOIN Users u ON b.user_id = u.user_id
-         JOIN Devices d ON b.device_id = d.device_id`
+         JOIN Devices d ON b.device_id = d.device_id
+         JOIN maincategories m ON d.main_category_id = m.main_category_id 
+         LEFT JOIN SponsoredAds sa 
+  ON sa.ad_entity_type = 'auction'
+  AND sa.ad_entity_id = d.device_id
+  AND sa.start_date <= CURRENT_TIMESTAMP 
+  AND sa.end_date >= CURRENT_TIMESTAMP ORDER BY end_date`
+  );
+  return result.rows;
+};
+
+export const getLatestAuctionsDb = async (limit = 4) => {
+  const result = await pool.query(
+    `SELECT 
+        d.*, 
+        c.main_category_name,
+        u.username AS seller_username,
+        u.address AS seller_address,
+        b.*,
+        (SELECT image_path 
+         FROM DeviceImages di 
+         WHERE di.device_id = d.device_id 
+         ORDER BY di.created_at ASC 
+         LIMIT 1) AS image_url,
+        sa.start_date AS ad_start_date,
+        CASE 
+          WHEN sa.ad_id IS NOT NULL THEN TRUE 
+          ELSE FALSE 
+        END AS is_Sponsored
+     FROM Bids b
+     JOIN Devices d ON b.device_id = d.device_id
+     JOIN maincategories c ON d.main_category_id = c.main_category_id 
+     JOIN Users u ON d.seller_id = u.user_id 
+     LEFT JOIN SponsoredAds sa 
+        ON sa.ad_entity_id = b.bid_id 
+        AND sa.ad_entity_type = 'auction' 
+        AND sa.end_date >= CURRENT_TIMESTAMP
+     WHERE d.is_auction = true and b.auction_end_time > CURRENT_TIMESTAMP
+     ORDER BY
+        CASE WHEN sa.ad_id IS NOT NULL THEN 0 ELSE 1 END,
+        sa.end_date DESC NULLS LAST,
+        b.auction_end_time DESC
+     LIMIT $1`,
+    [limit]
   );
   return result.rows;
 };
 
 export const getBidByIdDb = async (bid_id) => {
   const result = await pool.query(
-    `SELECT b.*, u.username AS bidder_username, d.*
+    `SELECT b.*, u.username AS bidder_username, d.*, c.main_category_name
          FROM bids b
          JOIN Users u ON b.user_id = u.user_id
          JOIN Devices d ON b.device_id = d.device_id
+         JOIN maincategories c ON d.main_category_id = c.main_category_id
          WHERE b.bid_id = $1`,
     [bid_id]
   );
   if (result.rows.length === 0) {
     throw new AppError("Bid not found", 404);
   }
-  return result.rows[0];
+
+  const imagesResult = await pool.query(
+    `SELECT image_path FROM DeviceImages WHERE device_id = $1`,
+    [result.rows[0].device_id]
+  );
+  console.log(imagesResult);
+  return { bid: result.rows[0], images: [...imagesResult.rows] };
 };
 
 export const createBid = async (
@@ -32,12 +94,19 @@ export const createBid = async (
   user_id,
   minimum_increment,
   auction_end_time,
+  minimumNonCancellablePrice
 ) => {
   const result = await pool.query(
-    `INSERT INTO bids (device_id, user_id, minimum_increment, auction_end_time)
-       VALUES ($1, $2, $3, $4)
+    `INSERT INTO bids (device_id, user_id, minimum_increment, auction_end_time,minimumNonCancellablePrice)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-    [device_id, user_id, minimum_increment, auction_end_time]
+    [
+      device_id,
+      user_id,
+      minimum_increment,
+      auction_end_time,
+      minimumNonCancellablePrice,
+    ]
   );
   return result.rows[0];
 };
@@ -49,7 +118,6 @@ export const getUserBalances = async (user_id) => {
     [user_id]
   );
 
-  console.log("getUserBalances", result.rows, user_id);
   if (result.rows.length === 0) {
     throw new AppError("User not found", 404);
   }
@@ -63,7 +131,6 @@ export const updateUserBalances = async (
   wallet_balance,
   pending_balance
 ) => {
-  console.log(wallet_balance);
   const result = await client.query(
     `UPDATE Users SET wallet_balance = $1, pending_balance = $2 WHERE user_id = $3 RETURNING *`,
     [wallet_balance, parseInt(pending_balance), user_id]
@@ -98,18 +165,17 @@ export const addBidToHistory = async (bid_id, user_id, bid_amount) => {
     const auction = bid.rows[0];
     const currentTime = new Date();
     const auctionEndTime = new Date(auction.auction_end_time);
-    if (currentTime > auctionEndTime) {
-      throw new AppError("This auction has ended", 400);
+    if (currentTime > auctionEndTime && !auction.is_ended) {
+      throw new AppError("لا يمكن المزايدة المزاد انتهى.", 400);
     }
 
     // 2. التحقق من أرصدة المستخدم
     const balances = await getUserBalances(user_id);
-    console.log(balances);
     const walletBalance = balances.wallet_balance;
     const pendingBalance = Math.round(balances.pending_balance);
     if (walletBalance < bid_amount) {
       throw new AppError(
-        `Insufficient balance. Your available balance is ${walletBalance}, but you bid ${bid_amount}`,
+        `الرصيد غير كافى الرصيد المطلوب للمزايدة هو ${bid_amount} (الرصيد الموجود هو ${walletBalance})`,
         400
       );
     }
@@ -129,9 +195,9 @@ export const addBidToHistory = async (bid_id, user_id, bid_amount) => {
 
     if (bid_amount < minimumRequiredBid) {
       throw new AppError(
-        `Bid amount must be at least ${minimumRequiredBid} (current highest: ${
+        `المزايدة لازم تبقى ع الاقل ${minimumRequiredBid} اعلى مزايدة حاليا هى ${
           highestBid ? highestBid.bid_amount : auction.starting_price
-        }, minimum increment: ${auction.minimum_increment})`,
+        } الحد الادنى للزيادة هو ${auction.minimum_increment}`,
         400
       );
     }
@@ -151,14 +217,19 @@ export const addBidToHistory = async (bid_id, user_id, bid_amount) => {
     // 5. نقل المبلغ من wallet_balance إلى pending_balance
     const updatedWalletBalance = walletBalance - bid_amount;
     const updatedPendingBalance = pendingBalance + bid_amount;
-    console.log(
-      `Updated Wallet Balance: ${updatedWalletBalance}, Updated Pending Balance: ${updatedPendingBalance}`
-    );
     await updateUserBalances(
       client,
       user_id,
       updatedWalletBalance,
       updatedPendingBalance
+    );
+
+    await logWalletUsingClientTransaction(
+      client,
+      user_id,
+      bid_amount,
+      "withdraw",
+      "سحب رصيد لإجراء مزايدة"
     );
 
     // 6. إضافة المزايدة في BidHistory
@@ -207,8 +278,8 @@ export const cancelBid = async (bid_id, user_id) => {
     const auction = bid.rows[0];
     const currentTime = new Date();
     const auctionEndTime = new Date(auction.auction_end_time);
-    if (currentTime > auctionEndTime) {
-      throw new AppError("This auction has ended, cannot cancel bid", 400);
+    if (currentTime > auctionEndTime || auction.is_ended) {
+      throw new AppError("المزاد انتهى مينفعش تلغى المزايدة دلوقتى.", 400);
     }
 
     // 2. جلب المزايدة الخاصة بالمستخدم
@@ -230,6 +301,14 @@ export const cancelBid = async (bid_id, user_id) => {
       user_id,
       updatedWalletBalance,
       updatedPendingBalance
+    );
+
+    await logWalletUsingClientTransaction(
+      client,
+      user_id,
+      +bidAmount,
+      "deposit",
+      "إرجاع رصيد المزايدة المُلغاة"
     );
 
     // 4. حذف المزايدة من BidHistory
@@ -256,7 +335,7 @@ export const finalizeAuction = async (bid_id) => {
 
     // 1. التحقق من حالة المزاد
     const bidResult = await client.query(
-      `SELECT b.*, u.user_id AS seller_id
+      `SELECT b.*, u.user_id AS seller_id, d.name AS device_name
        FROM Bids b
        JOIN Devices d ON b.device_id = d.device_id
        JOIN Users u ON b.user_id = u.user_id
@@ -268,11 +347,10 @@ export const finalizeAuction = async (bid_id) => {
     }
     const auction = bidResult.rows[0];
     const sellerId = auction.seller_id;
-    const currentTime = new Date();
-    const auctionEndTime = new Date(auction.auction_end_time);
-    // if (currentTime < auctionEndTime) {
-    //   throw new AppError("Auction has not yet ended", 400);
-    // }
+    console.log("auction", auction);
+    if (auction.bid_status === "ended" || auction.bid_status === "cancled") {
+      throw new AppError("المزاد انتهى خلاص", 400);
+    }
 
     // 2. جلب أعلى مزايدة
     const highestBidResult = await client.query(
@@ -283,7 +361,7 @@ export const finalizeAuction = async (bid_id) => {
       [bid_id]
     );
     if (highestBidResult.rows.length === 0) {
-      throw new AppError("No bids placed on this auction", 400);
+      throw new AppError("مفيش حد شارك فى المزاد", 400);
     }
     const highestBid = highestBidResult.rows[0];
     const winnerId = highestBid.user_id;
@@ -310,7 +388,6 @@ export const finalizeAuction = async (bid_id) => {
 
     // 5. نقل المبلغ لرصيد البائع
     const sellerBalances = await getUserBalances(sellerId);
-    console.log("sellerBalances", sellerBalances, "for sellerId", sellerId);
     const sellerNewWalletBalance =
       +sellerBalances.wallet_balance + +winningAmount;
     await updateUserBalances(
@@ -318,6 +395,14 @@ export const finalizeAuction = async (bid_id) => {
       sellerId,
       sellerNewWalletBalance,
       sellerBalances.pending_balance
+    );
+
+    await logWalletUsingClientTransaction(
+      client,
+      sellerId,
+      +winningAmount,
+      "deposit",
+      `بيع المزاد ${auction.device_name} بمبلغ ${winningAmount}`
     );
 
     // 6. إرجاع الرصيد المعلق لباقي المستخدمين اللي ما فازوش
@@ -337,12 +422,21 @@ export const finalizeAuction = async (bid_id) => {
         loserNewWalletBalance,
         loserNewPendingBalance
       );
+
+      await logWalletUsingClientTransaction(
+        client,
+        loserId,
+        +bidAmount,
+        "deposit",
+        `إرجاع رصيد المزايدةالمزاد على ${auction.device_name}انتهى ولم تفز به مع الاسف`
+      );
     }
 
     // 7. تحديث حالة المزاد إنه انتهى
-    await client.query(`UPDATE Bids SET is_ended = TRUE WHERE bid_id = $1`, [
-      bid_id,
-    ]);
+    await client.query(
+      `UPDATE Bids SET bid_status = 'ended',winning_bid_id = $1 WHERE bid_id = $2`,
+      [winnerId, bid_id]
+    );
 
     await client.query("COMMIT");
     return { winnerId, winningAmount, sellerId };
@@ -363,4 +457,31 @@ export const getBidHistoryByIdDb = async (bid_id) => {
     [bid_id]
   );
   return result.rows;
+};
+
+export const cancelBidSellerDb = async (bid_id) => {
+  const bid = await getBidById(bid_id);
+  const getHighestBid = await getHighestBidForAuction(bid_id);
+  if (!bid) {
+    throw new AppError("Bid not found", 404);
+  }
+
+  if (bid.bid_status === "ended") {
+    throw new AppError("المزاد منتهى.", 400);
+  }
+
+  if (
+    getHighestBid &&
+    bid.minimumnoncancellableprice <= getHighestBid.bid_amount
+  ) {
+    throw new AppError(
+      `لا يمكن الغاء المزاد لانه تجاوز السعر المتوقع وهو ${bid.minimumnoncancellableprice} ج.م`,
+      400
+    );
+  }
+  const result = await pool.query(
+    `UPDATE Bids SET bid_status = 'cancled' WHERE bid_id = $1`,
+    [bid_id]
+  );
+  return result.rows[0];
 };

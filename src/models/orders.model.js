@@ -1,6 +1,7 @@
 // models/orders.model.js
 import { pool } from "../config/db.js";
 import AppError from "../utils/AppError.js";
+import { logWalletUsingClientTransaction } from "./wallet.model.js";
 
 // دالة لإنشاء طلب جديد
 export const createOrder = async (buyer_id, seller_id, total_price) => {
@@ -105,7 +106,6 @@ export const getCartItemsWithDetails = async (user_id) => {
 export const getUserOrdersDb = async (user_id) => {
   const result = await pool.query(
     `SELECT o.*, u.username AS seller_name,
-              d.image_url,
               oi.device_id, oi.quantity,
               d.name,
               p.payment_method, p.amount AS payment_amount, p.transaction_id,
@@ -150,10 +150,57 @@ export const updateOrderStatusDb = async (order_id, status) => {
     throw new AppError("Invalid status", 400);
   }
 
+  const client = await pool.connect();
+
+  if (status == "delivered") {
+    // تحويل المبلغ كرصيد قابل للسحب للبائع
+    try {
+      await client.query("BEGIN");
+      const order_status = await client.query(
+        `SELECT status FROM orders WHERE order_id = $1`,
+        [order_id]
+      );
+
+      if (order_status.rows[0].status == "delivered") {
+        throw new AppError("تم تسليم هذا الطلب من قبل", 400);
+      }
+
+      const order_result = await client.query(
+        `SELECT o.*, d.current_price, d.seller_id, d.name AS device_name FROM orderitems o JOIN devices d ON o.device_id = d.device_id WHERE o.order_id = $1`,
+        [order_id]
+      );
+
+      for (const order of order_result.rows) {
+        const total_price = parseInt(order.current_price) * order.quantity;
+        const seller_id = order.seller_id;
+        const device_name = order.device_name;
+
+        await client.query(
+          `UPDATE Users SET wallet_balance = wallet_balance + $1 , pending_balance = pending_balance - $1 WHERE user_id = $2`,
+          [total_price, seller_id]
+        );
+
+        await logWalletUsingClientTransaction(
+          client,
+          seller_id,
+          total_price,
+          "sale",
+          `بيع ${device_name} تم تسليم واتمام العملية بنجاح تقدر تسحب فلوس الصفقة دلوقتى`
+        );
+      }
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   const result = await pool.query(
     `UPDATE Orders 
      SET status = $1, updated_at = CURRENT_TIMESTAMP 
-     WHERE order_id = $2`,
+     WHERE order_id = $2 AND status != 'delivered'`,
     [status, order_id]
   );
   return result.rowCount;

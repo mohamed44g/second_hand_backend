@@ -11,7 +11,7 @@ import { calculateDays } from "../utils/calcDuration.js";
 // إنشاء إعلان ممول جديد
 export const createSponsoredAd = AsyncWrapper(async (req, res, next) => {
   const { ad_entity_type, ad_entity_id, end_date } = req.body;
-  const cost = calculateDays(new Date(), end_date) * 100;
+  const cost = calculateDays(new Date(), end_date) * 50;
   const user_id = req.user.userId;
 
   if (!ad_entity_type || !ad_entity_id || !end_date) {

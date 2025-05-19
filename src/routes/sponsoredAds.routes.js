@@ -5,11 +5,17 @@ import {
   getUserSponsoredAds,
 } from "../controllers/sponsoredAds.controller.js";
 import { auth } from "../middlewares/auth.middleware.js";
+import { authorizeRoles } from "../middlewares/authorize.middlewares.js";
 
 const router = express.Router();
 
-router.get("/", getActiveSponsoredAds);
-router.post("/", auth, createSponsoredAd);
-router.get("/user", auth, getUserSponsoredAds);
+router.get("/", auth, authorizeRoles("admin"), getActiveSponsoredAds);
+router.post("/", auth, authorizeRoles("admin", "seller"), createSponsoredAd);
+router.get(
+  "/user",
+  auth,
+  authorizeRoles("admin", "seller"),
+  getUserSponsoredAds
+);
 
 export default router;

@@ -15,6 +15,10 @@ import { clearCartDb } from "../models/cart.model.js";
 import { Sendresponse } from "../utils/response.js";
 import AppError from "../utils/AppError.js";
 import AsyncWrapper from "../middlewares/errorWrapper.middleware.js";
+import {
+  logWalletUsingClientTransaction,
+  updatePendingBalanceDb,
+} from "../models/wallet.model.js";
 
 // دالة للشراء من الكارت (Checkout)
 export const checkoutFromCart = AsyncWrapper(async (req, res, next) => {
@@ -105,7 +109,7 @@ export const checkoutFromCart = AsyncWrapper(async (req, res, next) => {
 
 // دالة للشراء المباشر
 export const purchaseDirectly = AsyncWrapper(async (req, res, next) => {
-  const { device_id, quantity, shipping_address, card_details } = req.body;
+  const { device_id, quantity = 1, shipping_address, card_details } = req.body;
   const buyer_id = req.user.userId;
 
   if (!device_id || !quantity || !shipping_address || !card_details) {
@@ -133,7 +137,9 @@ export const purchaseDirectly = AsyncWrapper(async (req, res, next) => {
     // 1. جلب بيانات الجهاز
     const device = await getDeviceById(device_id);
     const seller_id = device.seller_id;
-    const total_price = device.price * quantity;
+    const total_price = +device.starting_price * quantity;
+
+    const siteFee = 0.05 * total_price; // 5% من السعر الكلي
 
     // 2. إنشاء الطلب
     const order = await createOrder(buyer_id, seller_id, total_price);
@@ -141,7 +147,19 @@ export const purchaseDirectly = AsyncWrapper(async (req, res, next) => {
     // 3. إضافة عنصر الطلب
     await addOrderItem(order.order_id, device_id, quantity);
 
-    // 4. تسجيل الدفعة
+    // 4. اضافة المبلغ لرصيد البائع وتسجيله فى سجل المعاملات
+    await updatePendingBalanceDb(client, seller_id, +total_price);
+
+    // 5. اضافة المبلغ الى سجل المعاملات لدى البائع
+    await logWalletUsingClientTransaction(
+      client,
+      seller_id,
+      total_price,
+      "deposit",
+      `رصيد معلق من بيع ${device.name}`
+    );
+
+    // 6. تسجيل الدفعة
     const transaction_id = `VISA-${order.order_id}-${Date.now()}`;
     await addPayment(
       order.order_id,
@@ -151,8 +169,8 @@ export const purchaseDirectly = AsyncWrapper(async (req, res, next) => {
       buyer_id
     );
 
-    // 5. إضافة بيانات الشحن
-    const shipping_company = "Aramex";
+    // 7. إضافة بيانات الشحن
+    const shipping_company = "second-hand";
     const tracking_number = `TRK-${order.order_id}-${Date.now()}`;
     await addShipping(
       order.order_id,
@@ -160,9 +178,6 @@ export const purchaseDirectly = AsyncWrapper(async (req, res, next) => {
       shipping_company,
       tracking_number
     );
-
-    // 6. تحديث حالة الطلب
-    await updateOrderStatus(order.order_id, "processing");
 
     await client.query("COMMIT");
     Sendresponse(res, 201, "Purchase successful", order);

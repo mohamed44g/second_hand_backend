@@ -42,15 +42,24 @@ CREATE TABLE Devices (
     starting_price DECIMAL(10, 2) NOT NULL,
     current_price DECIMAL(10, 2) NOT NULL,
     seller_id INT,
-    image_url VARCHAR(255),
     condition VARCHAR(50),
     manufacturing_year INT,
     accessories TEXT,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected'))
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     is_auction BOOLEAN DEFAULT FALSE,
     FOREIGN KEY (category_id) REFERENCES Categories(category_id),
     FOREIGN KEY (seller_id) REFERENCES Users(user_id)
+);
+
+--store device images
+CREATE TABLE DeviceImages (
+    image_id SERIAL PRIMARY KEY,
+    device_id INT NOT NULL,
+    image_path VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (device_id) REFERENCES Devices(device_id) ON DELETE CASCADE
 );
 
 
@@ -130,7 +139,7 @@ CREATE TABLE wallet_history (
     history_id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
     amount DECIMAL(10, 2) NOT NULL,
-    transaction_type VARCHAR(20) NOT NULL CHECK (transaction_type IN ('deposit', 'withdraw')),
+    transaction_type VARCHAR(20) NOT NULL CHECK (transaction_type IN ('deposit', 'withdraw', 'purchase', 'sale')),
     description TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
@@ -197,10 +206,12 @@ CREATE TABLE Bids (
     device_id INT,
     user_id INT,
     auction_end_time TIMESTAMP,
-    minimum_increment DECIMAL(10, 2),
+    bid_status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (bid_status IN ('pending','active','cancled', 'ended')),
+    minimum_increment DECIMAL(10, 1),
+    minimumNonCancellablePrice INT,
     winning_bid_id INT,
     FOREIGN KEY (device_id) REFERENCES Devices(device_id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id) REFERENCES Users(user_id),
+    FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE,
     FOREIGN KEY (winning_bid_id) REFERENCES Users(user_id)
 );
 
@@ -211,8 +222,8 @@ CREATE TABLE BidHistory (
     user_id INT,
     bid_amount DECIMAL(10, 2) NOT NULL,
     bid_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (bid_id) REFERENCES Bids(bid_id),
-    FOREIGN KEY (user_id) REFERENCES Users(user_id)
+    FOREIGN KEY (bid_id) REFERENCES Bids(bid_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
 );
 
 

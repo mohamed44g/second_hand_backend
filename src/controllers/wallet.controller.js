@@ -62,3 +62,4 @@ export const getWalletHistory = AsyncWrapper(async (req, res, next) => {
     walletHistory
   );
 });
+

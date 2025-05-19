@@ -7,6 +7,7 @@ import {
 import { auth } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
+// Protected routes
 router.get("/", auth, getUserOrders);
 router.post("/checkout", auth, checkoutFromCart); // الشراء من الكارت
 router.post("/purchase", auth, purchaseDirectly); // الشراء المباشر

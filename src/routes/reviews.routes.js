@@ -10,10 +10,12 @@ import { auth } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
-router.post("/device", auth, addDeviceReview);
-router.get("/device/:device_id", auth, getDeviceReviews);
+//Public routes
+router.get("/device/:device_id", getDeviceReviews);
+router.get("/seller/:seller_id", getSellerReviews);
 
+//Proteced routes
+router.post("/device", auth, addDeviceReview);
 router.post("/seller", auth, addSellerReview);
-router.get("/seller/:seller_id", auth, getSellerReviews);
 
 export default router;
