@@ -71,9 +71,11 @@ export const getPendingDevicesDb = async () => {
        FROM DeviceImages di 
        WHERE di.device_id = d.device_id 
        ORDER BY di.created_at ASC 
-       LIMIT 1) AS image_url
+       LIMIT 1) AS image_url,
+       b.bid_id
      FROM Devices d
      JOIN Users u ON d.seller_id = u.user_id
+     LEFT JOIN bids b ON d.device_id = b.device_id
      JOIN MainCategories mc ON d.main_category_id = mc.main_category_id
      JOIN Subcategories sc ON d.subcategory_id = sc.subcategory_id
      WHERE d.status = 'pending'`
@@ -154,8 +156,6 @@ export const updateDeviceDb = async (deviceId, sellerId, updates, files) => {
   const imagePaths = [];
   let fullImagePaths = [];
 
-  console.log("updates", updates);
-
   try {
     await client.query("BEGIN");
 
@@ -188,7 +188,6 @@ export const updateDeviceDb = async (deviceId, sellerId, updates, files) => {
       condition: updates.condition,
       manufacturing_year: updates.manufacturing_year,
       accessories: updates.accessories,
-      is_auction: updates.is_auction,
     };
 
     for (const [key, value] of Object.entries(updatableFields)) {
@@ -584,7 +583,7 @@ export const deleteDeviceDb = async (userId, deviceId) => {
 };
 
 export const updateDeviceStatusDb = async (deviceId, status) => {
-  if (!["accepted", "rejected"].includes(status)) {
+  if (!["accepted", "rejected", "sold"].includes(status)) {
     throw new AppError("Invalid status", 400);
   }
   const result = await pool.query(

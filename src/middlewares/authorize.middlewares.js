@@ -8,8 +8,16 @@ export const authorizeRoles = (...roles) => {
       throw new AppError("غير مسموح من فضلك سجل الدخول.", 401);
     }
 
-    if (!roles.includes(user.role)) {
-      throw new AppError("غير مسموح لا يوجد صلاحية لهذا المستخدم", 403);
+    if (roles.includes("admin")) {
+      if (!user.is_admin) {
+        throw new AppError("غير مسموح لا يوجد صلاحية لهذا المستخدم", 403);
+      }
+      return next();
+    } else if (roles.includes("seller")) {
+      if (!user.is_seller) {
+        throw new AppError("غير مسموح لا يوجد صلاحية لهذا المستخدم", 403);
+      }
+      return next();
     }
 
     next();

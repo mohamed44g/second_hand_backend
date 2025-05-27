@@ -52,7 +52,15 @@ export const getUserChatsDb = async (user_id) => {
 };
 
 // جلب رسائل شات معين
-export const getChatMessagesDb = async (chat_id) => {
+export const getChatMessagesDb = async (chat_id, user_id, is_admin) => {
+  // تحقق من وجود الشات
+  const chatCheck = await pool.query(
+    `SELECT * FROM Chats WHERE chat_id = $1 AND (user_id_1 = $2 OR user_id_2 = $2)`,
+    [chat_id, user_id]
+  );
+  if (chatCheck.rows.length === 0 && !is_admin) {
+    throw new AppError("انت لا تمتلك صلاحة الدخول لهذا الشات.", 403);
+  }
   const result = await pool.query(
     `SELECT m.*, u.username AS sender_name 
      FROM Messages m
@@ -65,7 +73,16 @@ export const getChatMessagesDb = async (chat_id) => {
 };
 
 // جلب بيانات الشات
-export const getChatDetailsDb = async (chat_id, current_user_id) => {
+export const getChatDetailsDb = async (chat_id, current_user_id, is_admin) => {
+  // تحقق من وجود الشات
+  const chatCheck = await pool.query(
+    `SELECT * FROM Chats WHERE chat_id = $1 AND (user_id_1 = $2 OR user_id_2 = $2)`,
+    [chat_id, current_user_id]
+  );
+  if (chatCheck.rows.length === 0 && !is_admin) {
+    throw new AppError("انت لا تمتلك صلاحة الدخول لهذا الشات.", 403);
+  }
+
   const result = await pool.query(
     `SELECT c.*, 
             CASE 

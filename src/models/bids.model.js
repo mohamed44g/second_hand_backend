@@ -2,6 +2,8 @@
 import { pool } from "../config/db.js";
 import AppError from "../utils/AppError.js";
 import { logWalletUsingClientTransaction } from "./wallet.model.js";
+import { createOrder, addOrderItem, addShipping } from "./orders.model.js";
+import { updatePendingBalanceDb } from "./wallet.model.js";
 
 export const getAllBids = async () => {
   const result = await pool.query(
@@ -25,7 +27,7 @@ export const getAllBids = async () => {
   ON sa.ad_entity_type = 'auction'
   AND sa.ad_entity_id = d.device_id
   AND sa.start_date <= CURRENT_TIMESTAMP 
-  AND sa.end_date >= CURRENT_TIMESTAMP ORDER BY end_date`
+  AND sa.end_date >= CURRENT_TIMESTAMP WHERE d.status = 'accepted' ORDER BY end_date`
   );
   return result.rows;
 };
@@ -56,7 +58,7 @@ export const getLatestAuctionsDb = async (limit = 4) => {
         ON sa.ad_entity_id = b.bid_id 
         AND sa.ad_entity_type = 'auction' 
         AND sa.end_date >= CURRENT_TIMESTAMP
-     WHERE d.is_auction = true and b.auction_end_time > CURRENT_TIMESTAMP
+     WHERE d.is_auction = true and b.auction_end_time > CURRENT_TIMESTAMP and d.status = 'accepted'
      ORDER BY
         CASE WHEN sa.ad_id IS NOT NULL THEN 0 ELSE 1 END,
         sa.end_date DESC NULLS LAST,
@@ -156,12 +158,23 @@ export const addBidToHistory = async (bid_id, user_id, bid_amount) => {
     await client.query("BEGIN");
 
     // 1. التحقق من حالة المزاد
-    const bid = await client.query(`SELECT * FROM Bids WHERE bid_id = $1`, [
-      bid_id,
-    ]);
+    const bid = await client.query(
+      `SELECT Bids.*, d.status,d.seller_id FROM Bids JOIN Devices d ON Bids.device_id = d.device_id WHERE bid_id = $1`,
+      [bid_id]
+    );
+
+    if (bid.rows[0].status !== "accepted") {
+      throw new AppError("المزاد غير متاح حاليا فى انتظار الموافقة.", 400);
+    }
+
     if (bid.rows.length === 0) {
       throw new AppError("Bid not found", 404);
     }
+
+    if (bid.rows[0].seller_id === user_id) {
+      throw new AppError("لا يمكنك المزايدة على مزادك الخاص.", 400);
+    }
+
     const auction = bid.rows[0];
     const currentTime = new Date();
     const auctionEndTime = new Date(auction.auction_end_time);
@@ -335,7 +348,7 @@ export const finalizeAuction = async (bid_id) => {
 
     // 1. التحقق من حالة المزاد
     const bidResult = await client.query(
-      `SELECT b.*, u.user_id AS seller_id, d.name AS device_name
+      `SELECT b.*, d.device_id,u.user_id AS seller_id, d.name AS device_name
        FROM Bids b
        JOIN Devices d ON b.device_id = d.device_id
        JOIN Users u ON b.user_id = u.user_id
@@ -347,7 +360,6 @@ export const finalizeAuction = async (bid_id) => {
     }
     const auction = bidResult.rows[0];
     const sellerId = auction.seller_id;
-    console.log("auction", auction);
     if (auction.bid_status === "ended" || auction.bid_status === "cancled") {
       throw new AppError("المزاد انتهى خلاص", 400);
     }
@@ -386,17 +398,27 @@ export const finalizeAuction = async (bid_id) => {
       winnerNewPendingBalance
     );
 
-    // 5. نقل المبلغ لرصيد البائع
-    const sellerBalances = await getUserBalances(sellerId);
-    const sellerNewWalletBalance =
-      +sellerBalances.wallet_balance + +winningAmount;
-    await updateUserBalances(
-      client,
-      sellerId,
-      sellerNewWalletBalance,
-      sellerBalances.pending_balance
+    // انشاء طلب بشراء الجهاز
+    const buyer_id = winnerId; // الفائز هو المشتري
+    const order = await createOrder(buyer_id, sellerId, winningAmount);
+
+    // إضافة عنصر الطلب
+    await addOrderItem(order.order_id, auction?.device_id, 1);
+
+    // 7. إضافة بيانات الشحن
+    const shipping_company = "second-hand";
+    const tracking_number = `TRK-${order.order_id}-${Date.now()}`;
+    await addShipping(
+      order.order_id,
+      shipping_address,
+      shipping_company,
+      tracking_number
     );
 
+    // تحديث الرصيد المعلق للبائع
+    await updatePendingBalanceDb(client, sellerId, +winningAmount);
+
+    // تسجيل مبلغ البائع فى سجل المعاملات
     await logWalletUsingClientTransaction(
       client,
       sellerId,
@@ -405,7 +427,7 @@ export const finalizeAuction = async (bid_id) => {
       `بيع المزاد ${auction.device_name} بمبلغ ${winningAmount}`
     );
 
-    // 6. إرجاع الرصيد المعلق لباقي المستخدمين اللي ما فازوش
+    // إرجاع الرصيد المعلق لباقي المستخدمين اللي ما فازوش
     const otherBids = await client.query(
       `SELECT * FROM BidHistory WHERE bid_id = $1 AND user_id != $2`,
       [bid_id, winnerId]

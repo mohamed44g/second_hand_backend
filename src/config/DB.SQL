@@ -45,7 +45,7 @@ CREATE TABLE Devices (
     condition VARCHAR(50),
     manufacturing_year INT,
     accessories TEXT,
-    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected'))
+    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected', 'sold')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     is_auction BOOLEAN DEFAULT FALSE,
@@ -96,8 +96,11 @@ CREATE TABLE OrderItems (
     order_id INT,
     device_id INT,
     quantity INT NOT NULL,
+    price DECIMAL(10, 2) NOT NULL,
+    seller_id INT NOT NULL,
     FOREIGN KEY (order_id) REFERENCES Orders(order_id),
-    FOREIGN KEY (device_id) REFERENCES Devices(device_id)
+    FOREIGN KEY (device_id) REFERENCES Devices(device_id),
+    FOREIGN KEY (seller_id) REFERENCES Users(user_id)
 );
 
 CREATE TABLE Cart (
@@ -120,7 +123,7 @@ CREATE TABLE OrderPayments (
     payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     transaction_id VARCHAR(100),
     FOREIGN KEY (order_id) REFERENCES Orders(order_id),
-    FOREIGN KEY (user_id) REFERENCES Users(user_id)
+    FOREIGN KEY (user_id) REFERENCES Users(user_id),
 );
 
 CREATE TABLE AdPayments (
@@ -139,7 +142,7 @@ CREATE TABLE wallet_history (
     history_id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
     amount DECIMAL(10, 2) NOT NULL,
-    transaction_type VARCHAR(20) NOT NULL CHECK (transaction_type IN ('deposit', 'withdraw', 'purchase', 'sale')),
+    transaction_type VARCHAR(20) NOT NULL CHECK (transaction_type IN ('deposit', 'withdraw', 'purchase', 'sale', 'pending')),
     description TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
@@ -244,10 +247,8 @@ CREATE TABLE Reports (
 // إنشاء جدول SiteWallet محفظة الموقع لاستقبال فلوس الاعلانات وفلوس الشحن من المنتجات
 CREATE TABLE SiteWallet (
     transaction_id SERIAL PRIMARY KEY,
-    ad_payment_id INT NOT NULL,
     amount DECIMAL(10, 2) NOT NULL,
-    transaction_type VARCHAR(20) NOT NULL CHECK (transaction_type IN ('credit', 'debit')),
+    transaction_type VARCHAR(20) NOT NULL CHECK (transaction_type IN ('credit', 'wallet')),
     description TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (ad_payment_id) REFERENCES AdPayments(payment_id) ON DELETE CASCADE
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

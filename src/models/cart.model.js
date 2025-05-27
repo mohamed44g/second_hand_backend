@@ -2,15 +2,52 @@
 import { pool } from "../config/db.js";
 import AppError from "../utils/AppError.js";
 
-// إضافة منتج للكارت
 export const addToCartDb = async (user_id, device_id, quantity) => {
-  const result = await pool.query(
-    `INSERT INTO Cart (user_id, device_id, quantity)
-     VALUES ($1, $2, $3)
-     RETURNING *`,
-    [user_id, device_id, quantity]
-  );
-  return result.rows[0];
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // 1. التحقق مما إذا كان العنصر موجودًا في السلة
+    const checkQuery = `
+      SELECT Cart.*, d.seller_id FROM Cart
+      WHERE user_id = $1 AND device_id = $2 JOIN Devices d ON Cart.device_id = d.device_id
+    `;
+    const checkResult = await client.query(checkQuery, [user_id, device_id]);
+
+    if (
+      checkResult.rows.length > 0 &&
+      checkResult.rows[0].seller_id == user_id
+    ) {
+      // المستخدم يحاول إضافة جهازه الخاص إلى السلة
+      await client.query("ROLLBACK");
+      throw new AppError("لا يمكنك إضافة جهازك الخاص إلى السلة", 400);
+    }
+    if (checkResult.rows.length > 0) {
+      // العنصر موجود بالفعل
+      await client.query("COMMIT");
+      throw new AppError("العنصر مضاف بالفعل لا يمكن اضافته مرة اخرى", 400);
+    }
+
+    // 2. إضافة العنصر إذا لم يكن موجودًا
+    const insertQuery = `
+      INSERT INTO Cart (user_id, device_id, quantity)
+      VALUES ($1, $2, $3)
+      RETURNING *
+    `;
+    const insertResult = await client.query(insertQuery, [
+      user_id,
+      device_id,
+      quantity,
+    ]);
+
+    await client.query("COMMIT");
+    return insertResult.rows[0];
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 // جلب محتويات الكارت لمستخدم معين

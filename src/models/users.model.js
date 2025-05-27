@@ -140,3 +140,27 @@ export const enableAccountDb = async (user_id) => {
   }
   return result.rows[0];
 };
+
+export const changeUserRoleDb = async (seller, user_id) => {
+  let result;
+  if (seller) {
+    result = await pool.query(
+      `UPDATE Users
+     SET is_seller = true
+     WHERE user_id = $1`,
+      [user_id]
+    );
+  } else {
+    result = await pool.query(
+      `UPDATE Users
+     SET is_seller = false
+     WHERE user_id = $1`,
+      [user_id]
+    );
+  }
+
+  if (result.rowCount === 0) {
+    throw new AppError("حدث خطا اثناء تحديث المستخدم", 404);
+  }
+  return result.rows[0];
+};

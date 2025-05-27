@@ -4,23 +4,29 @@ import AppError from "../utils/AppError.js";
 import { logWalletUsingClientTransaction } from "./wallet.model.js";
 
 // دالة لإنشاء طلب جديد
-export const createOrder = async (buyer_id, seller_id, total_price) => {
+export const createOrder = async (buyer_id, total_price) => {
   const result = await pool.query(
-    `INSERT INTO Orders (buyer_id, seller_id, total_price, status)
-     VALUES ($1, $2, $3, 'pending')
+    `INSERT INTO Orders (buyer_id,total_price, status)
+     VALUES ($1, $2,'pending')
      RETURNING *`,
-    [buyer_id, seller_id, total_price]
+    [buyer_id, total_price]
   );
   return result.rows[0];
 };
 
 // دالة لإضافة عنصر للطلب
-export const addOrderItem = async (order_id, device_id, quantity) => {
+export const addOrderItem = async (
+  order_id,
+  device_id,
+  quantity,
+  price,
+  seller_id
+) => {
   const result = await pool.query(
-    `INSERT INTO OrderItems (order_id, device_id, quantity)
-     VALUES ($1, $2, $3)
+    `INSERT INTO OrderItems (order_id, device_id, quantity,price, seller_id)
+     VALUES ($1, $2, $3, $4, $5)
      RETURNING *`,
-    [order_id, device_id, quantity]
+    [order_id, device_id, quantity, price, seller_id]
   );
   return result.rows[0];
 };
@@ -93,10 +99,9 @@ export const getDeviceById = async (device_id) => {
 // دالة لجلب أسعار الأجهزة من الكارت
 export const getCartItemsWithDetails = async (user_id) => {
   const result = await pool.query(
-    `SELECT c.*, d.starting_price, d.name, u.user_id AS seller_id
+    `SELECT c.*, d.starting_price AS price, d.name, d.seller_id AS seller_id
      FROM Cart c
      JOIN Devices d ON c.device_id = d.device_id
-     JOIN Users u ON c.user_id = u.user_id
      WHERE c.user_id = $1`,
     [user_id]
   );
@@ -134,9 +139,9 @@ export const getAllOrdersDb = async () => {
             o.order_date, 
             o.status
      FROM Orders o
-     JOIN Users buyer ON o.buyer_id = buyer.user_id
-     JOIN Users seller ON o.seller_id = seller.user_id
      JOIN OrderItems oi ON o.order_id = oi.order_id
+     JOIN Users buyer ON o.buyer_id = buyer.user_id
+     JOIN Users seller ON oi.seller_id = seller.user_id
      JOIN Devices d ON oi.device_id = d.device_id
      ORDER BY o.order_date DESC`
   );
@@ -166,12 +171,12 @@ export const updateOrderStatusDb = async (order_id, status) => {
       }
 
       const order_result = await client.query(
-        `SELECT o.*, d.current_price, d.seller_id, d.name AS device_name FROM orderitems o JOIN devices d ON o.device_id = d.device_id WHERE o.order_id = $1`,
+        `SELECT o.order_item_id, o.price As device_price , d.current_price, d.seller_id, d.name AS device_name FROM orderitems o JOIN devices d ON o.device_id = d.device_id WHERE o.order_id = $1`,
         [order_id]
       );
 
       for (const order of order_result.rows) {
-        const total_price = parseInt(order.current_price) * order.quantity;
+        const total_price = parseInt(order.device_price);
         const seller_id = order.seller_id;
         const device_name = order.device_name;
 

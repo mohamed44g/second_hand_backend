@@ -57,6 +57,10 @@ export const getSystemStatsDb = async () => {
   const totalAdsRevenue = await pool.query(
     `SELECT COALESCE(SUM(amount), 0) FROM AdPayments`
   );
+
+  const totalFee = await pool.query(
+    `SELECT COALESCE(SUM(amount), 0) FROM SiteWallet`
+  );
   const totalProducts = await pool.query(
     `SELECT COUNT(*) FROM Devices WHERE is_auction = FALSE`
   );
@@ -68,6 +72,7 @@ export const getSystemStatsDb = async () => {
     total_sales: parseInt(totalSales.rows[0].count),
     total_revenue: parseFloat(totalRevenue.rows[0].coalesce),
     total_ads_revenue: parseFloat(totalAdsRevenue.rows[0].coalesce),
+    total_fee: parseFloat(totalFee.rows[0].coalesce),
     total_products: parseInt(totalProducts.rows[0].count),
     total_auctions: parseInt(totalAuctions.rows[0].count),
   };

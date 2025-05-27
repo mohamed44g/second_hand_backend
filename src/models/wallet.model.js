@@ -61,6 +61,16 @@ export const logWalletUsingClientTransaction = async (
   transaction_type,
   description = null
 ) => {
+  console.log(transaction_type);
+  if (
+    transaction_type !== "withdraw" &&
+    transaction_type !== "deposit" &&
+    transaction_type !== "purchase" &&
+    transaction_type !== "pending" &&
+    transaction_type !== "sale"
+  ) {
+    throw new AppError("Invalid transaction type", 400);
+  }
   const result = await client.query(
     `INSERT INTO wallet_history (user_id, amount, transaction_type, description)
        VALUES ($1, $2, $3, $4)

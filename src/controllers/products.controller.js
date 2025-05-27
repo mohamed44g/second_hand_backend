@@ -71,7 +71,6 @@ export const updateDevice = AsyncWrapper(async (req, res, next) => {
     condition,
     manufacturing_year,
     accessories,
-    is_auction,
   } = req.body;
 
   const updatedDevice = await updateDeviceDb(
@@ -87,7 +86,6 @@ export const updateDevice = AsyncWrapper(async (req, res, next) => {
       condition,
       manufacturing_year,
       accessories,
-      is_auction,
     },
     req.files
   );

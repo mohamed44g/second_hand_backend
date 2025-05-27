@@ -12,6 +12,7 @@ import {
   getUserByIdDb,
   updateUserDb,
   changeUserPasswordDb,
+  changeUserRoleDb,
 } from "../models/users.model.js";
 import AppError from "../utils/AppError.js";
 import { getDevicesBySellerIdDb } from "../models/products.model.js";
@@ -120,7 +121,9 @@ export const sendVerificationCode = AsyncWrapper(async (req, res) => {
 
 export const login = AsyncWrapper(async (req, res, next) => {
   const { email, password } = req.body;
-  let role = "user";
+  let is_seller = false;
+  let is_admin = false;
+
   const user = await userCheck(null, email);
   if (!user) {
     return next(new AppError("Invalid username or password", 400));
@@ -131,15 +134,30 @@ export const login = AsyncWrapper(async (req, res, next) => {
     return next(new AppError("Invalid username or password", 400));
   }
 
-  if (user.is_seller) {
-    role = "seller";
-  } else if (user.is_admin) {
-    role = "admin";
+  if (user.is_seller && !user.is_admin) {
+    is_seller = true;
+    is_admin = false;
+  } else if (user.is_admin && user.is_seller) {
+    is_seller = true;
+    is_admin = true;
+  } else if (user.is_admin && !user.is_seller) {
+    is_seller = false;
+    is_admin = true;
   }
 
   //توليد التوكن اللى بيخلى المستخدم مستمر فى تسجيل الدخول
-  const AccessToken = generateAccessToken(user.user_id, user.email, role);
-  const RefreshToken = generateRefreshToken(user.user_id, user.email, role);
+  const AccessToken = generateAccessToken(
+    user.user_id,
+    user.email,
+    is_seller,
+    is_admin
+  );
+  const RefreshToken = generateRefreshToken(
+    user.user_id,
+    user.email,
+    is_seller,
+    is_admin
+  );
   res.cookie("RefreshToken", RefreshToken, {
     httpOnly: process.env.NODE_ENV === "production" ? true : false,
     maxAge: 7 * 24 * 60 * 60 * 1000, // صالح ل 7 أيام
@@ -148,6 +166,12 @@ export const login = AsyncWrapper(async (req, res, next) => {
   Sendresponse(res, 200, "User logged in successfully", {
     AccessToken,
   });
+});
+
+export const logout = AsyncWrapper(async (req, res) => {
+  // حذف الكوكيز الخاصة بالتوكن
+  res.clearCookie("RefreshToken");
+  Sendresponse(res, 200, "User logged out successfully");
 });
 
 export const getUserById = AsyncWrapper(async (req, res, next) => {
@@ -244,4 +268,16 @@ export const enableSeller = AsyncWrapper(async (req, res, next) => {
   const { user_id } = req.params;
   await enableAccountDb(user_id);
   Sendresponse(res, 200, "Seller enabled successfully", null);
+});
+
+export const changeUserRole = AsyncWrapper(async (req, res, next) => {
+  const { seller } = req.body;
+  const user_id = req.user.userId;
+  const changeRole = changeUserRoleDb(seller, user_id);
+
+  if (!changeRole) {
+    return next(AppError("حدث خطا اثناء تحديث دور المستخدم", 400));
+  }
+
+  Sendresponse(res, 200, "تم التحديث بنجاح سجل دخول من جديد", null);
 });

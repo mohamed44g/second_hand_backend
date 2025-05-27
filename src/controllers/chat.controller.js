@@ -18,7 +18,7 @@ export const startChatWithSeller = AsyncWrapper(async (req, res, next) => {
   }
 
   if (buyer_id === seller_id) {
-    return next(new AppError("You cannot start a chat with yourself", 400));
+    return next(new AppError("لا يمكنك بدا محادثة مع نفسك.", 400));
   }
 
   // إنشاء الشات
@@ -36,7 +36,9 @@ export const getUserChats = AsyncWrapper(async (req, res, next) => {
 // جلب رسائل شات معين
 export const getChatMessages = AsyncWrapper(async (req, res, next) => {
   const { chat_id } = req.params;
-  const messages = await getChatMessagesDb(chat_id);
+  const user_id = req.user.userId;
+  const is_admin = req.user.is_admin;
+  const messages = await getChatMessagesDb(chat_id, user_id, is_admin);
   Sendresponse(res, 200, "Messages fetched successfully", messages);
 });
 
@@ -44,6 +46,7 @@ export const getChatMessages = AsyncWrapper(async (req, res, next) => {
 export const getChatDetails = AsyncWrapper(async (req, res, next) => {
   const { chat_id } = req.params;
   const user_id = req.user.userId;
-  const chatDetails = await getChatDetailsDb(chat_id, user_id);
+  const is_admin = req.user.is_admin;
+  const chatDetails = await getChatDetailsDb(chat_id, user_id, is_admin);
   Sendresponse(res, 200, "Chat details fetched successfully", chatDetails);
 });
