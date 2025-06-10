@@ -27,7 +27,7 @@ export const getAllBids = async () => {
   ON sa.ad_entity_type = 'auction'
   AND sa.ad_entity_id = d.device_id
   AND sa.start_date <= CURRENT_TIMESTAMP 
-  AND sa.end_date >= CURRENT_TIMESTAMP WHERE d.status = 'accepted' ORDER BY end_date`
+  AND sa.end_date >= CURRENT_TIMESTAMP WHERE d.status = 'accepted' OR d.status = 'sold' ORDER BY end_date`
   );
   return result.rows;
 };
@@ -98,6 +98,14 @@ export const createBid = async (
   auction_end_time,
   minimumNonCancellablePrice
 ) => {
+  const checkActivty = await pool.query(
+    `SELECT status FROM users WHERE user_id = $1`,
+    [user_id]
+  );
+
+  if (checkActivty?.rows[0]?.status !== "active") {
+    throw new AppError("حسابك معطل لا يمكنك نشر منتجات الان.", 403);
+  }
   const result = await pool.query(
     `INSERT INTO bids (device_id, user_id, minimum_increment, auction_end_time,minimumNonCancellablePrice)
        VALUES ($1, $2, $3, $4, $5)
@@ -400,10 +408,22 @@ export const finalizeAuction = async (bid_id) => {
 
     // انشاء طلب بشراء الجهاز
     const buyer_id = winnerId; // الفائز هو المشتري
-    const order = await createOrder(buyer_id, sellerId, winningAmount);
+    const buyer_address = await client.query(
+      `SELECT address FROM users WHERE user_id = $1`,
+      [buyer_id]
+    );
+
+    const shipping_address = buyer_address.rows[0].address;
+    const order = await createOrder(buyer_id, winningAmount);
 
     // إضافة عنصر الطلب
-    await addOrderItem(order.order_id, auction?.device_id, 1);
+    await addOrderItem(
+      order.order_id,
+      auction?.device_id,
+      1,
+      winningAmount,
+      sellerId
+    );
 
     // 7. إضافة بيانات الشحن
     const shipping_company = "second-hand";
@@ -415,17 +435,17 @@ export const finalizeAuction = async (bid_id) => {
       tracking_number
     );
 
-    // تحديث الرصيد المعلق للبائع
-    await updatePendingBalanceDb(client, sellerId, +winningAmount);
+    // // تحديث الرصيد المعلق للبائع
+    // await updatePendingBalanceDb(client, sellerId, +winningAmount);
 
-    // تسجيل مبلغ البائع فى سجل المعاملات
-    await logWalletUsingClientTransaction(
-      client,
-      sellerId,
-      +winningAmount,
-      "deposit",
-      `بيع المزاد ${auction.device_name} بمبلغ ${winningAmount}`
-    );
+    // // تسجيل مبلغ البائع فى سجل المعاملات
+    // await logWalletUsingClientTransaction(
+    //   client,
+    //   sellerId,
+    //   +winningAmount,
+    //   "deposit",
+    //   `بيع المزاد ${auction.device_name} بمبلغ ${winningAmount}`
+    // );
 
     // إرجاع الرصيد المعلق لباقي المستخدمين اللي ما فازوش
     const otherBids = await client.query(
@@ -456,8 +476,13 @@ export const finalizeAuction = async (bid_id) => {
 
     // 7. تحديث حالة المزاد إنه انتهى
     await client.query(
-      `UPDATE Bids SET bid_status = 'ended',winning_bid_id = $1 WHERE bid_id = $2`,
+      `UPDATE Bids SET bid_status = 'ended', winning_bid_id = $1 WHERE bid_id = $2`,
       [winnerId, bid_id]
+    );
+
+    await client.query(
+      `UPDATE devices SET status = 'sold' WHERE device_id = $1`,
+      [auction?.device_id]
     );
 
     await client.query("COMMIT");

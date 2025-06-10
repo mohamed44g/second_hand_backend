@@ -9,9 +9,11 @@ export const addToCartDb = async (user_id, device_id, quantity) => {
 
     // 1. التحقق مما إذا كان العنصر موجودًا في السلة
     const checkQuery = `
-      SELECT Cart.*, d.seller_id FROM Cart
-      WHERE user_id = $1 AND device_id = $2 JOIN Devices d ON Cart.device_id = d.device_id
-    `;
+  SELECT Cart.*, d.seller_id 
+  FROM Cart
+  JOIN Devices d ON Cart.device_id = d.device_id
+  WHERE Cart.user_id = $1 AND Cart.device_id = $2
+`;
     const checkResult = await client.query(checkQuery, [user_id, device_id]);
 
     if (

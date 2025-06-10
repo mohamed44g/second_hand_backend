@@ -12,33 +12,37 @@ export const getAllDevices = async (filters = {}) => {
   const { mainCategory, subcategory, location, minPrice, maxPrice } = filters;
 
   let query = `
-    SELECT 
-      d.*,
-      CASE 
+SELECT 
+    d.*,
+    CASE 
         WHEN sa.ad_id IS NOT NULL THEN TRUE 
         ELSE FALSE 
-      END AS is_Sponsored, 
-      sa.end_date AS ad_end_date,
-      u.username AS seller_username,
-      u.address AS seller_address,
-      mc.main_category_name,
-      sc.subcategory_name,
-      (SELECT AVG(r.rating) FROM Reviews r WHERE r.device_id = d.device_id) AS rating,
-      (SELECT image_path 
-       FROM DeviceImages di 
-       WHERE di.device_id = d.device_id 
-       ORDER BY di.created_at ASC 
-       LIMIT 1) AS image_url
-    FROM Devices d
-    JOIN Users u ON d.seller_id = u.user_id
-    JOIN MainCategories mc ON d.main_category_id = mc.main_category_id
-    JOIN Subcategories sc ON d.subcategory_id = sc.subcategory_id
-    LEFT JOIN SponsoredAds sa 
-      ON sa.ad_entity_type = 'device'
-      AND sa.ad_entity_id = d.device_id
-      AND sa.end_date >= CURRENT_TIMESTAMP
-    WHERE d.is_auction = false AND d.status = 'accepted'
-  `;
+    END AS is_Sponsored, 
+    sa.end_date AS ad_end_date,
+    CONCAT(u.first_name, ' ', u.last_name) AS seller_username,
+    u.address AS seller_address,
+    mc.main_category_name,
+    sc.subcategory_name,
+    (SELECT AVG(r.rating) FROM Reviews r WHERE r.device_id = d.device_id) AS rating,
+    (SELECT image_path 
+     FROM DeviceImages di 
+     WHERE di.device_id = d.device_id 
+     ORDER BY di.created_at ASC 
+     LIMIT 1) AS image_url,
+    CASE 
+        WHEN d.status = 'accepted' THEN 1 
+        WHEN d.status = 'sold' THEN 2 
+    END AS status_order
+FROM Devices d
+JOIN Users u ON d.seller_id = u.user_id
+JOIN MainCategories mc ON d.main_category_id = mc.main_category_id
+JOIN Subcategories sc ON d.subcategory_id = sc.subcategory_id
+LEFT JOIN SponsoredAds sa 
+    ON sa.ad_entity_type = 'device'
+    AND sa.ad_entity_id = d.device_id
+    AND sa.end_date >= CURRENT_TIMESTAMP
+WHERE d.is_auction = false AND d.status = 'accepted' OR d.status = 'sold'
+`;
   const values = [];
 
   if (mainCategory) {
@@ -58,7 +62,7 @@ export const getAllDevices = async (filters = {}) => {
     query += ` AND d.starting_price <= $${values.length}`;
   }
 
-  query += ` ORDER BY d.created_at DESC`;
+  query += `ORDER BY status_order ASC`;
 
   const result = await pool.query(query, values);
   return result.rows;
@@ -66,7 +70,7 @@ export const getAllDevices = async (filters = {}) => {
 
 export const getPendingDevicesDb = async () => {
   const result = await pool.query(
-    `SELECT d.*, u.username AS seller_username, u.address AS seller_address, mc.main_category_name, sc.subcategory_name,
+    `SELECT d.*, CONCAT(u.first_name, ' ', u.last_name) AS seller_username, u.address AS seller_address, mc.main_category_name, sc.subcategory_name,
           (SELECT image_path 
        FROM DeviceImages di 
        WHERE di.device_id = d.device_id 
@@ -102,6 +106,15 @@ export const createDevice = async (
   let fullImagePaths;
   try {
     await client.query("BEGIN");
+    const checkActivty = await client.query(
+      `SELECT status FROM users WHERE user_id = $1`,
+      [seller_id]
+    );
+
+    if (checkActivty?.rows[0]?.status !== "active") {
+      throw new AppError("حسابك معطل لا يمكنك نشر منتجات الان.", 403);
+    }
+
     const result = await client.query(
       `INSERT INTO Devices (
           name, description, main_category_id, subcategory_id, starting_price, current_price,
@@ -274,7 +287,7 @@ export const getDeviceByIdDb = async (device_id) => {
   const result = await pool.query(
     `SELECT
         d.*,
-        u.username AS seller_username,
+        CONCAT(u.first_name, ' ', u.last_name) AS seller_username,
         u.address As seller_address,
         mc.main_category_name,
         sc.subcategory_name,

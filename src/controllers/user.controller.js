@@ -206,8 +206,9 @@ export const updateUser = AsyncWrapper(async (req, res, next) => {
 });
 
 export const deleteUser = AsyncWrapper(async (req, res, next) => {
-  const { userId } = req.user;
-  const user = await userDelete(userId);
+  const { userId, is_admin } = req.user;
+  const { deletedAccountId } = req.params;
+  const user = await userDelete(userId, is_admin, deletedAccountId);
   if (!user) {
     return next(new AppError("User not found", 404));
   }

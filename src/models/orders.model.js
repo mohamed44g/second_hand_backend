@@ -1,4 +1,3 @@
-// models/orders.model.js
 import { pool } from "../config/db.js";
 import AppError from "../utils/AppError.js";
 import { logWalletUsingClientTransaction } from "./wallet.model.js";
@@ -6,8 +5,8 @@ import { logWalletUsingClientTransaction } from "./wallet.model.js";
 // دالة لإنشاء طلب جديد
 export const createOrder = async (buyer_id, total_price) => {
   const result = await pool.query(
-    `INSERT INTO Orders (buyer_id,total_price, status)
-     VALUES ($1, $2,'pending')
+    `INSERT INTO Orders (buyer_id, total_price, status)
+     VALUES ($1, $2, 'pending')
      RETURNING *`,
     [buyer_id, total_price]
   );
@@ -23,7 +22,7 @@ export const addOrderItem = async (
   seller_id
 ) => {
   const result = await pool.query(
-    `INSERT INTO OrderItems (order_id, device_id, quantity,price, seller_id)
+    `INSERT INTO OrderItems (order_id, device_id, quantity, price, seller_id)
      VALUES ($1, $2, $3, $4, $5)
      RETURNING *`,
     [order_id, device_id, quantity, price, seller_id]
@@ -108,16 +107,18 @@ export const getCartItemsWithDetails = async (user_id) => {
   return result.rows;
 };
 
+// دالة لجلب طلبات المستخدم
 export const getUserOrdersDb = async (user_id) => {
   const result = await pool.query(
-    `SELECT o.*, u.username AS seller_name,
-              oi.device_id, oi.quantity,
-              d.name,
-              p.payment_method, p.amount AS payment_amount, p.transaction_id,
-              s.shipping_address, s.shipping_company, s.tracking_number, s.shipped_at
+    `SELECT o.*, 
+            oi.seller_id, u.username AS seller_name,
+            oi.device_id, oi.quantity, oi.price AS item_price,
+            d.name AS device_name,
+            p.payment_method, p.amount AS payment_amount, p.transaction_id,
+            s.shipping_address, s.shipping_company, s.tracking_number, s.shipped_at
        FROM Orders o
-       JOIN Users u ON o.seller_id = u.user_id
        LEFT JOIN OrderItems oi ON o.order_id = oi.order_id
+       LEFT JOIN Users u ON oi.seller_id = u.user_id
        LEFT JOIN Devices d ON oi.device_id = d.device_id
        LEFT JOIN OrderPayments p ON o.order_id = p.order_id
        LEFT JOIN Shipping s ON o.order_id = s.order_id
@@ -135,6 +136,7 @@ export const getAllOrdersDb = async () => {
             buyer.username AS buyer, 
             seller.username AS seller, 
             d.name AS product, 
+            oi.price AS item_price, 
             o.total_price, 
             o.order_date, 
             o.status
@@ -148,7 +150,7 @@ export const getAllOrdersDb = async () => {
   return result.rows;
 };
 
-// تحديث حالة الطلب للادمن
+// تحديث حالة الطلب للأدمن
 export const updateOrderStatusDb = async (order_id, status) => {
   const validStatuses = ["processing", "shipped", "delivered"];
   if (!validStatuses.includes(status)) {
@@ -156,57 +158,160 @@ export const updateOrderStatusDb = async (order_id, status) => {
   }
 
   const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
 
-  if (status == "delivered") {
-    // تحويل المبلغ كرصيد قابل للسحب للبائع
-    try {
-      await client.query("BEGIN");
-      const order_status = await client.query(
-        `SELECT status FROM orders WHERE order_id = $1`,
-        [order_id]
-      );
+    // التحقق من حالة الطلب الحالية
+    const order_status = await client.query(
+      `SELECT status FROM Orders WHERE order_id = $1`,
+      [order_id]
+    );
 
-      if (order_status.rows[0].status == "delivered") {
-        throw new AppError("تم تسليم هذا الطلب من قبل", 400);
-      }
+    if (order_status.rows.length === 0) {
+      throw new AppError("Order not found", 404);
+    }
 
+    if (order_status.rows[0].status === "delivered") {
+      throw new AppError("تم تسليم هذا الطلب من قبل", 400);
+    }
+
+    if (status === "delivered") {
+      // جلب بيانات عناصر الطلب
       const order_result = await client.query(
-        `SELECT o.order_item_id, o.price As device_price , d.current_price, d.seller_id, d.name AS device_name FROM orderitems o JOIN devices d ON o.device_id = d.device_id WHERE o.order_id = $1`,
+        `SELECT oi.order_item_id, oi.price AS device_price, oi.seller_id, d.name AS device_name
+         FROM OrderItems oi
+         JOIN Devices d ON oi.device_id = d.device_id
+         WHERE oi.order_id = $1`,
         [order_id]
       );
 
-      for (const order of order_result.rows) {
-        const total_price = parseInt(order.device_price);
-        const seller_id = order.seller_id;
-        const device_name = order.device_name;
+      for (const item of order_result.rows) {
+        const total_price = parseFloat(item.device_price);
+        const seller_id = item.seller_id;
+        const device_name = item.device_name;
 
+        // حساب رسوم الموقع
+        let siteFee;
+        if (total_price < 1000) {
+          siteFee = 25;
+        } else if (total_price >= 1000 && total_price < 10000) {
+          siteFee = 0.025 * total_price;
+        } else {
+          siteFee = 250;
+        }
+
+        const seller_share = total_price - siteFee;
+
+        // تحويل المبلغ إلى رصيد البائع القابل للسحب
         await client.query(
-          `UPDATE Users SET wallet_balance = wallet_balance + $1 , pending_balance = pending_balance - $1 WHERE user_id = $2`,
-          [total_price, seller_id]
+          `UPDATE Users SET wallet_balance = wallet_balance + $1 WHERE user_id = $2`,
+          [seller_share, seller_id]
         );
 
+        // تسجيل معاملة البائع
         await logWalletUsingClientTransaction(
           client,
           seller_id,
-          total_price,
+          seller_share,
           "sale",
-          `بيع ${device_name} تم تسليم واتمام العملية بنجاح تقدر تسحب فلوس الصفقة دلوقتى`
+          `بيع ${device_name} تم تسليمه بنجاح بعد خصم رسوم الموقع ${siteFee} ج.م`
+        );
+
+        // تسجيل رسوم الموقع في SiteWallet
+        await client.query(
+          `INSERT INTO SiteWallet (amount, transaction_type, description)
+           VALUES ($1, $2, $3)`,
+          [
+            siteFee,
+            "credit",
+            `Site fee for seller ${seller_id} in order ${order_id}`,
+          ]
         );
       }
-      await client.query("COMMIT");
-    } catch (error) {
-      await client.query("ROLLBACK");
-      throw error;
-    } finally {
-      client.release();
     }
+
+    // تحديث حالة الطلب
+    const result = await client.query(
+      `UPDATE Orders 
+       SET status = $1, updated_at = CURRENT_TIMESTAMP 
+       WHERE order_id = $2 AND status != 'delivered'
+       RETURNING *`,
+      [status, order_id]
+    );
+
+    if (result.rowCount === 0) {
+      throw new AppError("Order cannot be updated", 400);
+    }
+
+    await client.query("COMMIT");
+    return result.rows[0];
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+// دالة لإلغاء الطلب
+export const cancelOrderDb = async (client, order_id, user_id, is_admin) => {
+  // التحقق من حالة الطلب
+  const order_result = await client.query(
+    `SELECT o.*, p.amount AS payment_amount
+     FROM Orders o
+     JOIN OrderPayments p ON o.order_id = p.order_id
+     WHERE o.order_id = $1`,
+    [order_id]
+  );
+
+  if (order_result.rows.length === 0) {
+    throw new AppError("Order not found", 404);
   }
 
-  const result = await pool.query(
-    `UPDATE Orders 
-     SET status = $1, updated_at = CURRENT_TIMESTAMP 
-     WHERE order_id = $2 AND status != 'delivered'`,
-    [status, order_id]
+  const order = order_result.rows[0];
+
+  if (order.status === "delivered") {
+    throw new AppError("Cannot cancel a delivered order", 400);
+  }
+
+  if (!is_admin) {
+    throw new AppError("You are not authorized to cancel this order", 403);
+  }
+
+  // إرجاع المبلغ إلى محفظة المشتري
+  const refund_amount = parseFloat(order.payment_amount);
+  await client.query(
+    `UPDATE Users SET wallet_balance = wallet_balance + $1 WHERE user_id = $2`,
+    [refund_amount, order.buyer_id]
   );
-  return result.rowCount;
+
+  // تسجيل معاملة الإرجاع
+  await logWalletUsingClientTransaction(
+    client,
+    order.buyer_id,
+    refund_amount,
+    "deposit",
+    `ارجاع مبلغ الاوردر رقم ${order_id}`
+  );
+
+  // تحديث حالة الأجهزة إلى available
+  await client.query(
+    `UPDATE Devices d
+     SET status = 'accepted'
+     WHERE d.device_id IN (
+       SELECT device_id FROM OrderItems WHERE order_id = $1
+     )`,
+    [order_id]
+  );
+
+  // تحديث حالة الطلب إلى cancelled
+  const result = await client.query(
+    `UPDATE Orders 
+     SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP 
+     WHERE order_id = $1
+     RETURNING *`,
+    [order_id]
+  );
+
+  return result.rows[0];
 };

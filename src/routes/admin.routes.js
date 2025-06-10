@@ -6,6 +6,7 @@ import {
 } from "../controllers/admin.controller.js";
 import { auth } from "../middlewares/auth.middleware.js";
 import {
+  cancelOrder,
   getAllOrders,
   updateOrderStatus,
 } from "../controllers/orders.controller.js";
@@ -26,12 +27,20 @@ router.patch("/users/:user_id", auth, authorizeRoles("admin"), setUserRole);
 
 // الطلبات
 router.get("/orders", auth, authorizeRoles("admin"), getAllOrders);
+
+router.patch(
+  "/orders/cancel/:order_id",
+  auth,
+  authorizeRoles("admin"),
+  cancelOrder
+);
+
 router.patch(
   "/orders/:order_id",
   auth,
   authorizeRoles("admin"),
   updateOrderStatus
-); // للإدارة فقط (ممكن تضيف middleware للتحقق من الصلاحيات)
+);
 
 // التجار
 router.get("/sellers", auth, authorizeRoles("admin"), getSellers);

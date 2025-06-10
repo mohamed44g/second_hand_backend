@@ -36,5 +36,5 @@ router.get(
 );
 
 //admin
-router.delete("/delete", auth, authorizeRoles("admin"), deleteUser);
+router.delete("/:deletedAccountId", auth, deleteUser);
 export default router;

@@ -88,11 +88,7 @@ export const getChatDetailsDb = async (chat_id, current_user_id, is_admin) => {
             CASE 
               WHEN c.user_id_1 = $2 THEN u2.username 
               ELSE u1.username 
-            END AS other_user_name,
-            CASE 
-              WHEN c.user_id_1 = $2 THEN u2.avatar 
-              ELSE u1.avatar 
-            END AS other_user_avatar
+            END AS other_user_name
      FROM Chats c
      JOIN Users u1 ON c.user_id_1 = u1.user_id
      JOIN Users u2 ON c.user_id_2 = u2.user_id

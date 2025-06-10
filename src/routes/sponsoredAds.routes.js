@@ -10,7 +10,7 @@ import { authorizeRoles } from "../middlewares/authorize.middlewares.js";
 const router = express.Router();
 
 router.get("/", auth, authorizeRoles("admin"), getActiveSponsoredAds);
-router.post("/", auth, authorizeRoles("admin", "seller"), createSponsoredAd);
+router.post("/", auth, authorizeRoles("seller"), createSponsoredAd);
 router.get(
   "/user",
   auth,

@@ -50,7 +50,7 @@ CREATE TABLE Devices (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     is_auction BOOLEAN DEFAULT FALSE,
     FOREIGN KEY (category_id) REFERENCES Categories(category_id),
-    FOREIGN KEY (seller_id) REFERENCES Users(user_id)
+    FOREIGN KEY (seller_id) REFERENCES Users(user_id) ON DELETE SET NULL
 );
 
 --store device images
@@ -73,7 +73,7 @@ CREATE TABLE SponsoredAds (
     end_date TIMESTAMP NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE SET NULL
 );
 
 -- إنشاء جدول Orders
@@ -86,8 +86,8 @@ CREATE TABLE Orders (
     status VARCHAR(50) DEFAULT 'pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (buyer_id) REFERENCES Users(user_id),
-    FOREIGN KEY (seller_id) REFERENCES Users(user_id)
+    FOREIGN KEY (buyer_id) REFERENCES Users(user_id) ON DELETE SET NULL,
+    FOREIGN KEY (seller_id) REFERENCES Users(user_id) ON DELETE SET NULL
 );
 
 -- إنشاء جدول OrderItems
@@ -98,9 +98,9 @@ CREATE TABLE OrderItems (
     quantity INT NOT NULL,
     price DECIMAL(10, 2) NOT NULL,
     seller_id INT NOT NULL,
-    FOREIGN KEY (order_id) REFERENCES Orders(order_id),
-    FOREIGN KEY (device_id) REFERENCES Devices(device_id),
-    FOREIGN KEY (seller_id) REFERENCES Users(user_id)
+    FOREIGN KEY (order_id) REFERENCES Orders(order_id) ON DELETE CASCADE,
+    FOREIGN KEY (device_id) REFERENCES Devices(device_id) ON DELETE SET NULL,
+    FOREIGN KEY (seller_id) REFERENCES Users(user_id) ON DELETE SET NULL
 );
 
 CREATE TABLE Cart (
@@ -122,8 +122,8 @@ CREATE TABLE OrderPayments (
     user_id INT NOT NULL,
     payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     transaction_id VARCHAR(100),
-    FOREIGN KEY (order_id) REFERENCES Orders(order_id),
-    FOREIGN KEY (user_id) REFERENCES Users(user_id),
+    FOREIGN KEY (order_id) REFERENCES Orders(order_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE SET NULL
 );
 
 CREATE TABLE AdPayments (
@@ -134,8 +134,8 @@ CREATE TABLE AdPayments (
     payment_method VARCHAR(50),
     transaction_id VARCHAR(100),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (ad_id) REFERENCES SponsoredAds(ad_id),
-    FOREIGN KEY (user_id) REFERENCES Users(user_id)
+    FOREIGN KEY (ad_id) REFERENCES SponsoredAds(ad_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE SET NULL
 );
 
 CREATE TABLE wallet_history (
@@ -156,7 +156,7 @@ CREATE TABLE Shipping (
     shipping_company VARCHAR(100),
     tracking_number VARCHAR(100),
     shipped_at TIMESTAMP,
-    FOREIGN KEY (order_id) REFERENCES Orders(order_id)
+    FOREIGN KEY (order_id) REFERENCES Orders(order_id) ON DELETE CASCADE
 );
 
 -- إنشاء جدول Reviews
@@ -167,8 +167,8 @@ CREATE TABLE Reviews (
     rating INT CHECK (rating >= 1 AND rating <= 5),
     comment TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (device_id) REFERENCES Devices(device_id),
-    FOREIGN KEY (user_id) REFERENCES Users(user_id)
+    FOREIGN KEY (device_id) REFERENCES Devices(device_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
 );
 
 CREATE TABLE seller_reviews (
@@ -178,8 +178,8 @@ CREATE TABLE seller_reviews (
     rating INT CHECK (rating >= 1 AND rating <= 5),
     comment TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (seller_id) REFERENCES Users(user_id),
-    FOREIGN KEY (user_id) REFERENCES Users(user_id)
+    FOREIGN KEY (seller_id) REFERENCES Users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
 );
 
 -- إنشاء جدول Chats
@@ -188,8 +188,8 @@ CREATE TABLE Chats (
     user_id_1 INT,
     user_id_2 INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id_1) REFERENCES Users(user_id),
-    FOREIGN KEY (user_id_2) REFERENCES Users(user_id)
+    FOREIGN KEY (user_id_1) REFERENCES Users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id_2) REFERENCES Users(user_id) ON DELETE CASCADE
 );
 
 -- إنشاء جدول Messages
@@ -199,8 +199,8 @@ CREATE TABLE Messages (
     sender_id INT,
     message_text TEXT NOT NULL,
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (chat_id) REFERENCES Chats(chat_id),
-    FOREIGN KEY (sender_id) REFERENCES Users(user_id)
+    FOREIGN KEY (chat_id) REFERENCES Chats(chat_id) ON DELETE CASCADE,
+    FOREIGN KEY (sender_id) REFERENCES Users(user_id) ON DELETE CASCADE
 );
 
 
@@ -215,7 +215,7 @@ CREATE TABLE Bids (
     winning_bid_id INT,
     FOREIGN KEY (device_id) REFERENCES Devices(device_id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (winning_bid_id) REFERENCES Users(user_id)
+    FOREIGN KEY (winning_bid_id) REFERENCES Users(user_id) ON DELETE SET NULL
 );
 
 -- إنشاء جدول BidHistory
