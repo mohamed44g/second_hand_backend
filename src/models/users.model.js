@@ -48,7 +48,8 @@ export const userDelete = async (user_id, is_admin, deletedAccountId) => {
     [user_id]
   );
 
-  if (userCheck.rows[0].user_id !== user_id || !is_admin) {
+
+  if (userCheck.rows[0].user_id != user_id && !is_admin) {
     throw new AppError("لا يوجد صلاحية لديك لحذف الحساب.", 403);
   }
   const user = await pool.query(
