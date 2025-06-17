@@ -10,6 +10,8 @@ import {
   changeUserPassword,
   changeUserRole,
   logout,
+  resetPassword,
+  changePassword,
 } from "../controllers/user.controller.js";
 import { auth } from "../middlewares/auth.middleware.js";
 import { authorizeRoles } from "../middlewares/authorize.middlewares.js";
@@ -20,6 +22,8 @@ router.post("/register", upload.single("file"), register);
 router.post("/verification", sendVerificationCode);
 router.post("/login", login);
 router.post("/logout", logout);
+router.post("/reset-password", resetPassword);
+router.patch("/change-password", changePassword);
 
 //protected routes
 router.patch("/", auth, updateUser);

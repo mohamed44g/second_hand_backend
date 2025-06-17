@@ -13,15 +13,20 @@ import {
   updateUserDb,
   changeUserPasswordDb,
   changeUserRoleDb,
+  createResetToken,
+  findResetToken,
+  deleteResetToken,
 } from "../models/users.model.js";
 import AppError from "../utils/AppError.js";
 import { getDevicesBySellerIdDb } from "../models/products.model.js";
 import bcrypt from "bcrypt";
+import crypto from "crypto";
 import {
   generateAccessToken,
   generateRefreshToken,
 } from "../utils/jwtUtils.js";
 import { Sendresponse } from "../utils/response.js";
+
 export const register = AsyncWrapper(async (req, res, next) => {
   const {
     username,
@@ -41,7 +46,6 @@ export const register = AsyncWrapper(async (req, res, next) => {
     identity_image = `uploads/${req.file?.filename}`.replace(/\\/g, "/");
   }
 
-  //التحقق من وجود المستخدم
   const check = await userCheck(username, email);
 
   if (check) {
@@ -61,7 +65,6 @@ export const register = AsyncWrapper(async (req, res, next) => {
     return res.status(400).json({ msg: "Invalid verification code" });
   }
 
-  //تشفير الباسورد
   const saltRounds = 10;
   const hashedPassword = await bcrypt.hash(password, saltRounds);
 
@@ -92,14 +95,12 @@ export const sendVerificationCode = AsyncWrapper(async (req, res) => {
 
   const verificationCode = generateVerificationCode();
 
-  //تسجيل الكود في الجلسة
   req.session.verificationCode = {
     code: verificationCode,
     email: email,
-    expiresAt: Date.now() + 60 * 60 * 1000, //الكود صالح لمدة ساعة واحدة
+    expiresAt: Date.now() + 60 * 60 * 1000,
   };
 
-  // إرسال الكود عبر الإيميل
   const mailOptions = {
     from: "Second Hand <mohammedbadry456@gmail.com>",
     to: email,
@@ -128,7 +129,7 @@ export const login = AsyncWrapper(async (req, res, next) => {
   if (!user) {
     return next(new AppError("Invalid username or password", 400));
   }
-  //مقارنة الباسورد المحفوظ بالباسورد المشفر
+
   const passwordMatch = await bcrypt.compare(password, user.password);
   if (!passwordMatch) {
     return next(new AppError("Invalid username or password", 400));
@@ -145,7 +146,6 @@ export const login = AsyncWrapper(async (req, res, next) => {
     is_admin = true;
   }
 
-  //توليد التوكن اللى بيخلى المستخدم مستمر فى تسجيل الدخول
   const AccessToken = generateAccessToken(
     user.user_id,
     user.email,
@@ -160,7 +160,7 @@ export const login = AsyncWrapper(async (req, res, next) => {
   );
   res.cookie("RefreshToken", RefreshToken, {
     httpOnly: process.env.NODE_ENV === "production" ? true : false,
-    maxAge: 7 * 24 * 60 * 60 * 1000, // صالح ل 7 أيام
+    maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 
   Sendresponse(res, 200, "User logged in successfully", {
@@ -169,7 +169,6 @@ export const login = AsyncWrapper(async (req, res, next) => {
 });
 
 export const logout = AsyncWrapper(async (req, res) => {
-  // حذف الكوكيز الخاصة بالتوكن
   res.clearCookie("RefreshToken");
   Sendresponse(res, 200, "User logged out successfully");
 });
@@ -222,17 +221,78 @@ export const changeUserPassword = AsyncWrapper(async (req, res, next) => {
   if (!user) {
     return next(new AppError("User not found", 404));
   }
-  // Compare the current password with the stored password
+
   const passwordMatch = await bcrypt.compare(currentPassword, user.password);
   if (!passwordMatch) {
     return next(new AppError("Invalid current password", 400));
   }
-  // Hash the new password
+
   const saltRounds = 10;
   const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
-  // Update the user's password
+
   await changeUserPasswordDb(userId, hashedPassword);
   Sendresponse(res, 200, "Password changed successfully");
+});
+
+export const resetPassword = AsyncWrapper(async (req, res, next) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return next(new AppError("البريد الإلكتروني مطلوب", 400));
+  }
+
+  const user = await userCheck(null, email);
+  if (!user) {
+    // لا تكشف عن عدم وجود البريد لأسباب أمنية
+    return Sendresponse(res, 200, "إذا كان البريد موجودًا، تم إرسال رابط إعادة التعيين");
+  }
+
+  // توليد رمز عشوائي
+  const token = crypto.randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 ساعة
+
+  // تخزين الرمز
+  await createResetToken(user.user_id, token, expiresAt);
+
+  // إرسال البريد
+  const resetLink = `${process.env.FRONTEND_URL}/change-password?token=${token}`;
+  const mailOptions = {
+    from: "Second Hand <mohammedbadry456@gmail.com>",
+    to: email,
+    subject: "إعادة تعيين كلمة المرور - Second Hand",
+    html: `
+      <h2>مرحبًا!</h2>
+      <p>لإعادة تعيين كلمة المرور الخاصة بك، انقر على الرابط التالي:</p>
+      <a href="${resetLink}">${resetLink}</a>
+      <p>الرابط صالح لمدة ساعة واحدة فقط.</p>
+      <p>إذا لم تطلب إعادة تعيين كلمة المرور، يرجى تجاهل هذا الإيميل.</p>
+    `,
+  };
+
+  await transporter.sendMail(mailOptions);
+
+  Sendresponse(res, 200, "إذا كان البريد موجودًا، تم إرسال رابط إعادة التعيين");
+});
+
+export const changePassword = AsyncWrapper(async (req, res, next) => {
+  const { token, newPassword } = req.body;
+
+  if (!token || !newPassword) {
+    return next(new AppError("الرمز أو كلمة المرور الجديدة مفقودة", 400));
+  }
+
+  const resetToken = await findResetToken(token);
+  if (!resetToken || new Date() > resetToken.expires_at) {
+    return next(new AppError("الرمز غير صالح أو منتهي الصلاحية", 400));
+  }
+
+  const saltRounds = 10;
+  const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+
+  await changeUserPasswordDb(resetToken.user_id, hashedPassword);
+  await deleteResetToken(token);
+
+  Sendresponse(res, 200, "تم تغيير كلمة المرور بنجاح");
 });
 
 export const getSellerProducts = AsyncWrapper(async (req, res, next) => {
@@ -244,27 +304,23 @@ export const getSellerProducts = AsyncWrapper(async (req, res, next) => {
   Sendresponse(res, 200, "Seller devices retrieved successfully", devices);
 });
 
-// جلب كل التجار للادمن
 export const getSellers = AsyncWrapper(async (req, res, next) => {
   const sellers = await getAllSellersDb();
   Sendresponse(res, 200, "Sellers fetched successfully", sellers);
 });
 
-// حذف تاجر للادمن
 export const removeSeller = AsyncWrapper(async (req, res, next) => {
   const { user_id } = req.params;
   await deleteSellerDb(user_id);
   Sendresponse(res, 200, "Seller removed successfully", null);
 });
 
-// تعطيل اكونت التاجر للادمن
 export const disableSeller = AsyncWrapper(async (req, res, next) => {
   const { user_id } = req.params;
   await disableAccountDb(user_id);
   Sendresponse(res, 200, "Seller disabled successfully", null);
 });
 
-// تفعيل حساب التاجر للادمن
 export const enableSeller = AsyncWrapper(async (req, res, next) => {
   const { user_id } = req.params;
   await enableAccountDb(user_id);

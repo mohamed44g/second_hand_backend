@@ -1,9 +1,3 @@
--- إنشاء جدول Categories
-CREATE TABLE Categories (
-    category_id SERIAL PRIMARY KEY,
-    category_name VARCHAR(100) NOT NULL
-);
-
 -- إنشاء جدول Users
 CREATE TABLE Users (
     user_id SERIAL PRIMARY KEY,
@@ -25,12 +19,13 @@ CREATE TABLE Users (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- إنشاء جدول Admins
-CREATE TABLE Admins (
-    admin_id SERIAL PRIMARY KEY,
-    username VARCHAR(50) UNIQUE NOT NULL,
-    password VARCHAR(255) NOT NULL,
-    email VARCHAR(100) UNIQUE NOT NULL
+CREATE TABLE password_reset_tokens (
+  id SERIAL PRIMARY KEY,
+  user_id INT NOT NULL,
+  token VARCHAR(255) NOT NULL UNIQUE,
+  expires_at TIMESTAMP NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
 );
 
 -- إنشاء جدول Devices
@@ -38,7 +33,8 @@ CREATE TABLE Devices (
     device_id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     description TEXT,
-    category_id INT,
+    main_category_id INT NOT NULL,
+    subcategory_id INT NOT NULL,
     starting_price DECIMAL(10, 2) NOT NULL,
     current_price DECIMAL(10, 2) NOT NULL,
     seller_id INT,
@@ -49,8 +45,21 @@ CREATE TABLE Devices (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     is_auction BOOLEAN DEFAULT FALSE,
-    FOREIGN KEY (category_id) REFERENCES Categories(category_id),
+    FOREIGN KEY (main_category_id) REFERENCES maincategories(main_category_id),
+    FOREIGN KEY (subcategory_id) REFERENCES subcategories(subcategory_id),
     FOREIGN KEY (seller_id) REFERENCES Users(user_id) ON DELETE SET NULL
+);
+
+CREATE TABLE subcategories (
+    subcategory_id SERIAL PRIMARY KEY,
+    subcategory_name VARCHAR(100) NOT NULL,
+    main_category_id INT NOT NULL,
+    FOREIGN KEY (main_category_id) REFERENCES maincategories(main_category_id)
+);
+
+CREATE TABLE maincategories (
+    main_category_id SERIAL PRIMARY KEY,
+    main_category_name VARCHAR(100) NOT NULL
 );
 
 --store device images
@@ -244,7 +253,7 @@ CREATE TABLE Reports (
 );
 
 
-// إنشاء جدول SiteWallet محفظة الموقع لاستقبال فلوس الاعلانات وفلوس الشحن من المنتجات
+--إنشاء جدول SiteWallet محفظة الموقع لاستقبال فلوس الاعلانات وفلوس الشحن من المنتجات
 CREATE TABLE SiteWallet (
     transaction_id SERIAL PRIMARY KEY,
     amount DECIMAL(10, 2) NOT NULL,

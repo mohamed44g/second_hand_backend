@@ -1,13 +1,11 @@
 import { pool } from "../config/db.js";
 import AppError from "../utils/AppError.js";
+
 export const userCheck = async (username, email) => {
   const user = await pool.query(
     "SELECT * FROM Users WHERE username = $1 OR email = $2",
     [username, email]
   );
-  if (userCheck.rows?.length > 0) {
-    throw new AppError("User already exists", 400);
-  }
   return user.rows[0];
 };
 
@@ -23,7 +21,7 @@ export const userCreate = async (
   is_seller
 ) => {
   const user = await pool.query(
-    `INSERT INTO Users (username, email, password, first_name, last_name, phone_number, address,identity_image, is_seller)
+    `INSERT INTO Users (username, email, password, first_name, last_name, phone_number, address, identity_image, is_seller)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          RETURNING *`,
     [
@@ -38,8 +36,7 @@ export const userCreate = async (
       is_seller || false,
     ]
   );
-
-  return user;
+  return user.rows[0];
 };
 
 export const userDelete = async (user_id, is_admin, deletedAccountId) => {
@@ -47,7 +44,6 @@ export const userDelete = async (user_id, is_admin, deletedAccountId) => {
     `SELECT user_id, is_admin FROM users WHERE user_id = $1`,
     [user_id]
   );
-
 
   if (userCheck.rows[0].user_id != user_id && !is_admin) {
     throw new AppError("لا يوجد صلاحية لديك لحذف الحساب.", 403);
@@ -91,7 +87,6 @@ export const getUserByIdDb = async (user_id) => {
   return user.rows[0];
 };
 
-// جلب كل التجار للادمن
 export const getAllSellersDb = async () => {
   const result = await pool.query(
     `SELECT u.user_id, u.username, 
@@ -110,7 +105,6 @@ export const getAllSellersDb = async () => {
   }));
 };
 
-// حذف تاجر للادمن
 export const deleteSellerDb = async (user_id) => {
   const result = await pool.query(
     `DELETE FROM Users
@@ -123,7 +117,6 @@ export const deleteSellerDb = async (user_id) => {
   return result.rows[0];
 };
 
-// تحديث حالة حساب التاجر (تعطيل) للادمن
 export const disableAccountDb = async (user_id) => {
   const result = await pool.query(
     `UPDATE Users
@@ -137,7 +130,6 @@ export const disableAccountDb = async (user_id) => {
   return result.rows[0];
 };
 
-// تحديث حالة حساب التاجر (تفعيل) للادمن
 export const enableAccountDb = async (user_id) => {
   const result = await pool.query(
     `UPDATE Users
@@ -156,15 +148,15 @@ export const changeUserRoleDb = async (seller, user_id) => {
   if (seller) {
     result = await pool.query(
       `UPDATE Users
-     SET is_seller = true
-     WHERE user_id = $1`,
+       SET is_seller = true
+       WHERE user_id = $1`,
       [user_id]
     );
   } else {
     result = await pool.query(
       `UPDATE Users
-     SET is_seller = false
-     WHERE user_id = $1`,
+       SET is_seller = false
+       WHERE user_id = $1`,
       [user_id]
     );
   }
@@ -173,4 +165,31 @@ export const changeUserRoleDb = async (seller, user_id) => {
     throw new AppError("حدث خطا اثناء تحديث المستخدم", 404);
   }
   return result.rows[0];
+};
+
+// إضافة دوال لإدارة رموز إعادة تعيين كلمة المرور
+export const createResetToken = async (user_id, token, expires_at) => {
+  const result = await pool.query(
+    `INSERT INTO password_reset_tokens (user_id, token, expires_at)
+     VALUES ($1, $2, $3)
+     RETURNING *`,
+    [user_id, token, expires_at]
+  );
+  return result.rows[0];
+};
+
+export const findResetToken = async (token) => {
+  const result = await pool.query(
+    `SELECT * FROM password_reset_tokens WHERE token = $1`,
+    [token]
+  );
+  return result.rows[0];
+};
+
+export const deleteResetToken = async (token) => {
+  const result = await pool.query(
+    `DELETE FROM password_reset_tokens WHERE token = $1`,
+    [token]
+  );
+  return result.rowCount;
 };
