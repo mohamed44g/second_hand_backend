@@ -191,15 +191,7 @@ export const updateOrderStatusDb = async (order_id, status) => {
         const device_name = item.device_name;
 
         // حساب رسوم الموقع
-        let siteFee;
-        if (total_price < 1000) {
-          siteFee = 25;
-        } else if (total_price >= 1000 && total_price < 10000) {
-          siteFee = 0.025 * total_price;
-        } else {
-          siteFee = 250;
-        }
-
+        let siteFee = 0.1 * total_price;
         const seller_share = total_price - siteFee;
 
         // تحويل المبلغ إلى رصيد البائع القابل للسحب

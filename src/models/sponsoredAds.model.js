@@ -17,6 +17,20 @@ export const createSponsoredAdDb = async (
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    if (ad_entity_type === "auction") {
+      const auctionResult = await client.query(
+        `SELECT auction_end_time FROM Auctions WHERE auction_id = $1`,
+        [ad_entity_id]
+      );
+      const auctionEndTime = auctionResult.rows[0].auction_end_time;
+
+      if (auctionEndTime < end_date) {
+        throw new AppError(
+          "لا يمكن انشاء اعلان لان مدة الاعلان اكبر من مدة المزاد",
+          400
+        );
+      }
+    }
     // تحقق من رصيد محفظة البائع
     const walletResult = await client.query(
       `SELECT wallet_balance FROM Users WHERE user_id = $1`,
