@@ -7,7 +7,7 @@ import { updatePendingBalanceDb } from "./wallet.model.js";
 
 export const getAllBids = async () => {
   const result = await pool.query(
-    `SELECT b.*, m.main_category_name,u.username AS seller_username,
+    `SELECT b.*, m.main_category_name, CONCAT(u.first_name, ' ', u.last_name) AS seller_username,
         u.address As seller_address, d.*,
       CASE 
          WHEN sa.ad_id IS NOT NULL THEN TRUE 
@@ -37,7 +37,7 @@ export const getLatestAuctionsDb = async (limit = 4) => {
     `SELECT 
         d.*, 
         c.main_category_name,
-        u.username AS seller_username,
+        CONCAT(u.first_name, ' ', u.last_name) AS seller_username,
         u.address AS seller_address,
         b.*,
         (SELECT image_path 
@@ -71,7 +71,7 @@ export const getLatestAuctionsDb = async (limit = 4) => {
 
 export const getBidByIdDb = async (bid_id) => {
   const result = await pool.query(
-    `SELECT b.*, u.username AS bidder_username, d.*, c.main_category_name
+    `SELECT b.*, CONCAT(u.first_name, ' ', u.last_name) AS bidder_username, d.*, c.main_category_name
          FROM bids b
          JOIN Users u ON b.user_id = u.user_id
          JOIN Devices d ON b.device_id = d.device_id
@@ -435,18 +435,6 @@ export const finalizeAuction = async (bid_id) => {
       tracking_number
     );
 
-    // // تحديث الرصيد المعلق للبائع
-    // await updatePendingBalanceDb(client, sellerId, +winningAmount);
-
-    // // تسجيل مبلغ البائع فى سجل المعاملات
-    // await logWalletUsingClientTransaction(
-    //   client,
-    //   sellerId,
-    //   +winningAmount,
-    //   "deposit",
-    //   `بيع المزاد ${auction.device_name} بمبلغ ${winningAmount}`
-    // );
-
     // إرجاع الرصيد المعلق لباقي المستخدمين اللي ما فازوش
     const otherBids = await client.query(
       `SELECT * FROM BidHistory WHERE bid_id = $1 AND user_id != $2`,
@@ -497,7 +485,7 @@ export const finalizeAuction = async (bid_id) => {
 
 export const getBidHistoryByIdDb = async (bid_id) => {
   const result = await pool.query(
-    `SELECT b.*, u.username AS bidder_username
+    `SELECT b.*, CONCAT(u.first_name, ' ', u.last_name) AS bidder_username
          FROM BidHistory b
          JOIN Users u ON b.user_id = u.user_id
          WHERE b.bid_id = $1`,
