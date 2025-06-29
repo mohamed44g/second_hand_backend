@@ -115,13 +115,15 @@ export const getUserOrdersDb = async (user_id) => {
             oi.device_id, oi.quantity, oi.price AS item_price,
             d.name AS device_name,
             p.payment_method, p.amount AS payment_amount, p.transaction_id,
-            s.shipping_address, s.shipping_company, s.tracking_number, s.shipped_at
+            s.shipping_address, s.shipping_company, s.tracking_number, s.shipped_at,
+            di.image_path AS image_url
        FROM Orders o
        LEFT JOIN OrderItems oi ON o.order_id = oi.order_id
        LEFT JOIN Users u ON oi.seller_id = u.user_id
        LEFT JOIN Devices d ON oi.device_id = d.device_id
        LEFT JOIN OrderPayments p ON o.order_id = p.order_id
        LEFT JOIN Shipping s ON o.order_id = s.order_id
+       LEFT JOIN deviceimages di ON oi.device_id = di.device_id
        WHERE o.buyer_id = $1
        ORDER BY o.order_date DESC`,
     [user_id]
@@ -226,7 +228,7 @@ export const updateOrderStatusDb = async (order_id, status) => {
     const result = await client.query(
       `UPDATE Orders 
        SET status = $1, updated_at = CURRENT_TIMESTAMP 
-       WHERE order_id = $2 AND status != 'delivered'
+       WHERE order_id = $2 AND status != 'delivered' AND status != 'cancelled'
        RETURNING *`,
       [status, order_id]
     );
@@ -297,13 +299,29 @@ export const cancelOrderDb = async (client, order_id, user_id, is_admin) => {
   );
 
   // تحديث حالة الطلب إلى cancelled
-  const result = await client.query(
-    `UPDATE Orders 
-     SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP 
-     WHERE order_id = $1
-     RETURNING *`,
+  await client.query(
+    `DELETE FROM Orders 
+         WHERE order_id = $1 AND status != 'delivered'`,
     [order_id]
   );
 
-  return result.rows[0];
+  await client.query(
+    `DELETE FROM OrderItems 
+         WHERE order_id = $1`,
+    [order_id]
+  );
+
+  await client.query(
+    `DELETE FROM OrderPayments 
+         WHERE order_id = $1`,
+    [order_id]
+  );
+
+  await client.query(
+    `DELETE FROM Shipping 
+         WHERE order_id = $1`,
+    [order_id]
+  );
+
+  return order;
 };

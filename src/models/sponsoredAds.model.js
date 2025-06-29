@@ -17,14 +17,17 @@ export const createSponsoredAdDb = async (
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    if (ad_entity_type === "auction") {
+    if (ad_entity_type == "auction") {
       const auctionResult = await client.query(
-        `SELECT auction_end_time FROM Auctions WHERE auction_id = $1`,
+        `SELECT * FROM bids WHERE device_id = $1`,
         [ad_entity_id]
       );
+      if (auctionResult.rows.length === 0) {
+        throw new AppError("Bid not found", 404);
+      }
       const auctionEndTime = auctionResult.rows[0].auction_end_time;
-
-      if (auctionEndTime < end_date) {
+      const endDate = new Date(end_date);
+      if (auctionEndTime < endDate) {
         throw new AppError(
           "لا يمكن انشاء اعلان لان مدة الاعلان اكبر من مدة المزاد",
           400
@@ -43,6 +46,15 @@ export const createSponsoredAdDb = async (
         `الرصيد غير كافى رصيدك هو ${walletBalance} الرصيد المطلوب هو ${amount}`,
         400
       );
+    }
+
+    // check if the ad is already created
+    const adResult = await client.query(
+      `SELECT * FROM SponsoredAds WHERE ad_entity_type = $1 AND ad_entity_id = $2`,
+      [ad_entity_type, ad_entity_id]
+    );
+    if (adResult.rows.length > 0) {
+      throw new AppError("Ad already created", 400);
     }
 
     // خصم المبلغ من محفظة البائع

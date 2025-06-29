@@ -28,6 +28,18 @@ CREATE TABLE password_reset_tokens (
   FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
 );
 
+CREATE TABLE maincategories (
+    main_category_id SERIAL PRIMARY KEY,
+    main_category_name VARCHAR(100) NOT NULL
+);
+
+CREATE TABLE subcategories (
+    subcategory_id SERIAL PRIMARY KEY,
+    subcategory_name VARCHAR(100) NOT NULL,
+    main_category_id INT NOT NULL,
+    FOREIGN KEY (main_category_id) REFERENCES maincategories(main_category_id)
+);
+
 -- إنشاء جدول Devices
 CREATE TABLE Devices (
     device_id SERIAL PRIMARY KEY,
@@ -50,17 +62,6 @@ CREATE TABLE Devices (
     FOREIGN KEY (seller_id) REFERENCES Users(user_id) ON DELETE SET NULL
 );
 
-CREATE TABLE subcategories (
-    subcategory_id SERIAL PRIMARY KEY,
-    subcategory_name VARCHAR(100) NOT NULL,
-    main_category_id INT NOT NULL,
-    FOREIGN KEY (main_category_id) REFERENCES maincategories(main_category_id)
-);
-
-CREATE TABLE maincategories (
-    main_category_id SERIAL PRIMARY KEY,
-    main_category_name VARCHAR(100) NOT NULL
-);
 
 --store device images
 CREATE TABLE DeviceImages (
@@ -128,7 +129,7 @@ CREATE TABLE OrderPayments (
     order_id INT,
     payment_method VARCHAR(50) NOT NULL,
     amount DECIMAL(10, 2) NOT NULL,
-    user_id INT NOT NULL,
+    user_id INT,
     payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     transaction_id VARCHAR(100),
     FOREIGN KEY (order_id) REFERENCES Orders(order_id) ON DELETE CASCADE,

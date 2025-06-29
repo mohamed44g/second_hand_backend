@@ -296,7 +296,7 @@ export const getDeviceByIdDb = async (device_id) => {
       JOIN Users u ON d.seller_id = u.user_id
       JOIN MainCategories mc ON d.main_category_id = mc.main_category_id
       JOIN Subcategories sc ON d.subcategory_id = sc.subcategory_id
-      WHERE d.device_id = $1`,
+      WHERE d.device_id = $1 AND d.is_auction = false`,
     [device_id]
   );
 
@@ -367,7 +367,7 @@ LEFT JOIN bids b ON d.device_id = b.device_id
 JOIN maincategories m ON d.main_category_id = m.main_category_id 
 LEFT JOIN SponsoredAds sa 
   ON sa.ad_entity_type = 'device' AND sa.ad_entity_id = d.device_id
-  OR sa.ad_entity_type = 'auction' AND sa.ad_entity_id = b.bid_id
+  OR sa.ad_entity_type = 'auction' AND sa.ad_entity_id = b.device_id
   AND sa.status = 'active'
   AND sa.start_date <= CURRENT_TIMESTAMP 
   AND sa.end_date >= CURRENT_TIMESTAMP
@@ -390,6 +390,9 @@ export const getDevicesByCategoryDb = async (category_id) => {
       u.address AS seller_address,
       mc.main_category_name,
       sc.subcategory_name,
+      d.is_auction,
+      a.auction_end_time,
+      a.bid_id,
       (SELECT AVG(r.rating) FROM Reviews r WHERE r.device_id = d.device_id) AS rating,
       (SELECT image_path 
        FROM DeviceImages di 
@@ -398,6 +401,7 @@ export const getDevicesByCategoryDb = async (category_id) => {
        LIMIT 1) AS image_url
     FROM Devices d
     JOIN Users u ON d.seller_id = u.user_id
+    LEFT JOIN bids a ON d.device_id = a.device_id
     JOIN MainCategories mc ON d.main_category_id = mc.main_category_id
     JOIN Subcategories sc ON d.subcategory_id = sc.subcategory_id
     LEFT JOIN SponsoredAds sa 
@@ -422,6 +426,9 @@ export const getDevicesBySubcategoryDb = async (subcategory_id) => {
       u.username AS seller_username,
       u.address AS seller_address,
       mc.main_category_name,
+      d.is_auction,
+      a.auction_end_time,
+      a.bid_id,
       sc.subcategory_name,
       (SELECT AVG(r.rating) FROM Reviews r WHERE r.device_id = d.device_id) AS rating,
       (SELECT image_path 
@@ -431,6 +438,7 @@ export const getDevicesBySubcategoryDb = async (subcategory_id) => {
        LIMIT 1) AS image_url
     FROM Devices d
     JOIN Users u ON d.seller_id = u.user_id
+    LEFT JOIN bids a ON d.device_id = a.device_id
     JOIN MainCategories mc ON d.main_category_id = mc.main_category_id
     JOIN Subcategories sc ON d.subcategory_id = sc.subcategory_id
     LEFT JOIN SponsoredAds sa 

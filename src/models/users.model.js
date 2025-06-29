@@ -45,13 +45,21 @@ export const userDelete = async (user_id, is_admin, deletedAccountId) => {
     [user_id]
   );
 
-  if (userCheck.rows[0].user_id != user_id && !is_admin) {
+  if (userCheck.rows[0].user_id !== user_id) {
     throw new AppError("لا يوجد صلاحية لديك لحذف الحساب.", 403);
   }
-  const user = await pool.query(
-    "DELETE FROM Users WHERE user_id = $1 AND is_admin != 'true'",
+
+  const userCheckAdmin = await pool.query(
+    `SELECT user_id, is_admin FROM users WHERE user_id = $1`,
     [deletedAccountId]
   );
+  // if (userCheckAdmin.rows[0].is_admin) {
+  //   throw new AppError("لا يمكن حذف حساب الادمن.", 403);
+  // }
+
+  const user = await pool.query(`DELETE FROM Users WHERE user_id = $1`, [
+    deletedAccountId,
+  ]);
   return user.rowCount;
 };
 
