@@ -203,15 +203,17 @@ export const addBidToHistory = async (bid_id, user_id, bid_amount) => {
 
     // 3. التحقق من أعلى مزايدة حالية
     const highestBidResult = await client.query(
-      `SELECT * FROM BidHistory
-       WHERE bid_id = $1
-       ORDER BY bid_amount DESC
-       LIMIT 1`,
+      `SELECT max(bid_amount) FROM BidHistory
+       WHERE bid_id = $1`,
       [bid_id]
     );
     const highestBid = highestBidResult.rows[0];
+    console.log("highestBid", highestBid);
+    if (highestBid.max >= bid_amount) {
+      throw new AppError("المزايدة يجب ان تكون اكبر من اعلى مزايدة حاليا", 400);
+    }
     const minimumRequiredBid = highestBid
-      ? highestBid.bid_amount + auction.minimum_increment
+      ? highestBid.max + auction.minimum_increment
       : auction.starting_price + auction.minimum_increment;
 
     if (bid_amount < minimumRequiredBid) {
@@ -486,9 +488,9 @@ export const finalizeAuction = async (bid_id) => {
 export const getBidHistoryByIdDb = async (bid_id) => {
   const result = await pool.query(
     `SELECT b.*, CONCAT(u.first_name, ' ', u.last_name) AS bidder_username
-         FROM BidHistory b
-         JOIN Users u ON b.user_id = u.user_id
-         WHERE b.bid_id = $1`,
+       FROM BidHistory b
+       JOIN Users u ON b.user_id = u.user_id
+       WHERE b.bid_id = $1 ORDER BY b.bid_amount DESC`,
     [bid_id]
   );
   return result.rows;

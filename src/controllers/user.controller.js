@@ -16,6 +16,7 @@ import {
   createResetToken,
   findResetToken,
   deleteResetToken,
+  getStatsDb,
 } from "../models/users.model.js";
 import AppError from "../utils/AppError.js";
 import { getDevicesBySellerIdDb } from "../models/products.model.js";
@@ -244,7 +245,11 @@ export const resetPassword = AsyncWrapper(async (req, res, next) => {
   const user = await userCheck(null, email);
   if (!user) {
     // لا تكشف عن عدم وجود البريد لأسباب أمنية
-    return Sendresponse(res, 200, "إذا كان البريد موجودًا، تم إرسال رابط إعادة التعيين");
+    return Sendresponse(
+      res,
+      200,
+      "إذا كان البريد موجودًا، تم إرسال رابط إعادة التعيين"
+    );
   }
 
   // توليد رمز عشوائي
@@ -337,4 +342,9 @@ export const changeUserRole = AsyncWrapper(async (req, res, next) => {
   }
 
   Sendresponse(res, 200, "تم التحديث بنجاح سجل دخول من جديد", null);
+});
+
+export const getStats = AsyncWrapper(async (req, res, next) => {
+  const stats = await getStatsDb();
+  Sendresponse(res, 200, "Stats fetched successfully", stats);
 });

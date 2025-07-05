@@ -201,3 +201,14 @@ export const deleteResetToken = async (token) => {
   );
   return result.rowCount;
 };
+
+export const getStatsDb = async () => {
+  const result = await pool.query(
+    `SELECT 
+      (SELECT COUNT(*) FROM Users WHERE is_seller = true) AS total_sellers,
+      (SELECT COUNT(*) FROM Users WHERE is_seller = false) AS total_buyers,
+      (SELECT COUNT(*) FROM Devices WHERE status = 'accepted') AS total_devices,
+      (SELECT COUNT(*) FROM Orders WHERE status = 'delivered') AS total_orders;`
+  );
+  return result.rows[0];
+};

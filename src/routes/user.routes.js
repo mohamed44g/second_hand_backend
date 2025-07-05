@@ -12,6 +12,7 @@ import {
   logout,
   resetPassword,
   changePassword,
+  getStats,
 } from "../controllers/user.controller.js";
 import { auth } from "../middlewares/auth.middleware.js";
 import { authorizeRoles } from "../middlewares/authorize.middlewares.js";
@@ -24,6 +25,7 @@ router.post("/login", login);
 router.post("/logout", logout);
 router.post("/reset-password", resetPassword);
 router.patch("/change-password", changePassword);
+router.get("/stats", getStats);
 
 //protected routes
 router.patch("/", auth, updateUser);

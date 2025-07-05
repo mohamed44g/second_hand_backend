@@ -9,7 +9,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const getAllDevices = async (filters = {}) => {
-  const { mainCategory, subcategory, location, minPrice, maxPrice } = filters;
+  const { mainCategory, location, minPrice, maxPrice } = filters;
+  // build query
 
   let query = `
 SELECT 
@@ -41,7 +42,7 @@ LEFT JOIN SponsoredAds sa
     ON sa.ad_entity_type = 'device'
     AND sa.ad_entity_id = d.device_id
     AND sa.end_date >= CURRENT_TIMESTAMP
-WHERE d.is_auction = false AND d.status = 'accepted' OR d.status = 'sold'
+WHERE d.is_auction = false AND (d.status = 'accepted' OR d.status = 'sold')
 `;
   const values = [];
 
@@ -62,7 +63,7 @@ WHERE d.is_auction = false AND d.status = 'accepted' OR d.status = 'sold'
     query += ` AND d.starting_price <= $${values.length}`;
   }
 
-  query += `ORDER BY status_order ASC`;
+  query += ` ORDER BY status_order ASC`;
 
   const result = await pool.query(query, values);
   return result.rows;
